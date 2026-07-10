@@ -1,7 +1,7 @@
 # Sakura ✿ Chat
 
-A tiny roleplaying web app: talk to Sakura — a pink-haired, green-eyed anime girl —
-by voice or text. She answers in real time with her own voice (Gemini Live API),
+A tiny roleplaying web app: talk to Sakura — a pink-haired, green-eyed anime woman —
+by voice or text. Sakura is an adult anime character who answers in real time with her own voice (Gemini Live API),
 and her sprite lip-syncs to the audio.
 
 ## Run
@@ -27,7 +27,7 @@ mic button and just talk. You can interrupt her mid-sentence by speaking.
   RMS loudness of whatever is currently playing and picks one of three mouth
   sprites (closed / half / open) every 40 ms.
 - **`assets/`** — character sprites generated with GPT Image 2: one base image,
-  then image-to-image edits that change *only* the mouth (and one outfit swap),
+  then image-to-image edits that change _only_ the mouth (and one outfit swap),
   backgrounds removed so she composites over any scene. Two painted backgrounds
   plus a CSS-gradient one.
 
@@ -64,12 +64,12 @@ prebuilt voices), then restart the server.
 Sakura is a pink-haired, green-eyed anime girl rendered as layered PNG sprites
 with transparent backgrounds so she composites over any scene.
 
-| Aspect | Details |
-| --- | --- |
-| Look | Long light-pink hair, bright green eyes (described in `PERSONA`; drawn in sprites) |
-| Mouth states | `closed` / `half` / `open` — lip-synced from playback RMS every ~40 ms |
-| Outfits | Seifuku (`uniform_*.png`), Sundress (`casual_*.png`), Swimsuit (`swim_*.png`), Gym (`gym_*.png`) under `assets/sprites/` |
-| Backgrounds | Bedroom, Sakura park, Beach, Mt Fuji, Onsen (`assets/bg/`), plus a CSS “Dream” gradient |
+| Aspect       | Details                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Look         | Long light-pink hair, bright green eyes (described in `PERSONA`; drawn in sprites)                                       |
+| Mouth states | `closed` / `half` / `open` — lip-synced from playback RMS every ~40 ms                                                   |
+| Outfits      | Seifuku (`uniform_*.png`), Sundress (`casual_*.png`), Swimsuit (`swim_*.png`), Gym (`gym_*.png`) under `assets/sprites/` |
+| Backgrounds  | Bedroom, Sakura park, Beach, Mt Fuji, Onsen (`assets/bg/`), plus a CSS “Dream” gradient                                  |
 
 Sprites were generated with GPT Image 2 (base image, then image-to-image mouth
 and outfit edits). Switch looks with the top-right chips, or add your own by
