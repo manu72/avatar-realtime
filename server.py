@@ -53,6 +53,13 @@ CONFIG = types.LiveConnectConfig(
         )
     ),
     system_instruction=PERSONA,
+    # eager barge-in: trigger on speech start quickly so the user can interrupt
+    realtime_input_config=types.RealtimeInputConfig(
+        automatic_activity_detection=types.AutomaticActivityDetection(
+            start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+            prefix_padding_ms=100,
+        )
+    ),
     input_audio_transcription=types.AudioTranscriptionConfig(),
     output_audio_transcription=types.AudioTranscriptionConfig(),
     context_window_compression=types.ContextWindowCompressionConfig(

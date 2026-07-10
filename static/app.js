@@ -86,7 +86,7 @@ function connect() {
   ws.onmessage = (e) => {
     if (e.data instanceof ArrayBuffer) return playChunk(e.data);
     const m = JSON.parse(e.data);
-    if (m.type === "interrupted") stopPlayback();
+    if (m.type === "interrupted") { stopPlayback(); bubbles.her = null; } // close cut-off bubble
     else if (m.type === "turn_complete") { bubbles.you = bubbles.her = null; }
     else if (m.type === "you" || m.type === "her") appendTranscript(m.type, m.text);
   };
@@ -201,7 +201,19 @@ async function startMic() {
   const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
   await micCtx.audioWorklet.addModule(url);
   const node = new AudioWorkletNode(micCtx, "pcm16");
-  node.port.onmessage = (e) => { if (ws && ws.readyState === 1) ws.send(e.data); };
+  // local barge-in: cut her playback the instant sustained voice hits the mic,
+  // instead of waiting ~500ms for Gemini's interrupted signal to round-trip
+  let voiceRun = 0;
+  node.port.onmessage = (e) => {
+    if (ws && ws.readyState === 1) ws.send(e.data);
+    if (!active.size) { voiceRun = 0; return; } // only gate while she is speaking
+    const i16 = new Int16Array(e.data);
+    let sum = 0;
+    for (let i = 0; i < i16.length; i++) { const v = i16[i] / 32768; sum += v * v; }
+    // ponytail: fixed RMS threshold; adaptive ambient-noise floor if it misfires
+    voiceRun = Math.sqrt(sum / i16.length) > 0.04 ? voiceRun + 1 : 0;
+    if (voiceRun >= 3) { stopPlayback(); voiceRun = 0; } // ~100ms of sustained voice
+  };
   micCtx.createMediaStreamSource(micStream).connect(node);
   micBtn.classList.add("live");
   setStatus("listening…", "ok");
@@ -228,6 +240,7 @@ $("#bar").onsubmit = (e) => {
   const input = $("#msg");
   const text = input.value.trim();
   if (!text || !ws || ws.readyState !== 1) return;
+  stopPlayback(); // sending a message interrupts her mid-sentence, like real conversation
   ws.send(JSON.stringify({ type: "text", text }));
   appendTranscript("you", text);
   bubbles.you = null;
