@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sakura ✿ Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --pink: #ff8fb8;
+    --pink-deep: #f06292;
+    --mint: #7ed6a5;
+    --cream: #fff7f0;
+    --ink: #5d4157;
+    --glass: rgba(255, 247, 240, .72);
+    --glass-line: rgba(255, 255, 255, .85);
+    --shadow: 0 10px 30px rgba(93, 65, 87, .25);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Zen Maru Gothic", sans-serif;
+    color: var(--ink);
+    background: #ffd9e8;
+    user-select: none;
+  }
+
+  /* ---------- stage ---------- */
+  #stage {
+    position: fixed; inset: 0;
+    background: linear-gradient(160deg, #ffd9e8 0%, #e8d9ff 50%, #d0f4e0 100%);
+    background-size: cover; background-position: center;
+    transition: background-image .5s;
+  }
+  #stage::after { /* soft vignette so she pops */
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 60%, transparent 45%, rgba(93,65,87,.28) 100%);
+    pointer-events: none;
+  }
+
+  /* ---------- character ---------- */
+  #avatar {
+    position: absolute; left: 50%; bottom: -2vh;
+    height: 88vh; aspect-ratio: 688 / 1024;
+    transform: translateX(-50%);
+    filter: drop-shadow(0 18px 24px rgba(93,65,87,.35));
+    animation: breathe 4.2s ease-in-out infinite;
+    transform-origin: 50% 100%;
+    z-index: 2;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: translateX(-50%) scaleY(1); }
+    50%      { transform: translateX(-50%) scaleY(1.008) translateY(-3px); }
+  }
+  body.speaking #avatar { animation: bob .55s ease-in-out infinite; }
+  @keyframes bob {
+    0%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+    30%      { transform: translateX(-50%) translateY(-5px) rotate(-.4deg); }
+    70%      { transform: translateX(-50%) translateY(-2px) rotate(.4deg); }
+  }
+  #avatar img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; opacity: 0;
+  }
+  #avatar img.on { opacity: 1; }
+
+  /* ---------- floating petals ---------- */
+  .petal {
+    position: fixed; top: -5vh; font-size: 22px; color: #ffb7d1;
+    animation: fall linear infinite; pointer-events: none; z-index: 1;
+    text-shadow: 0 2px 6px rgba(240, 98, 146, .3);
+  }
+  @keyframes fall {
+    to { transform: translateY(110vh) translateX(9vw) rotate(360deg); }
+  }
+
+  /* ---------- header ---------- */
+  header {
+    position: fixed; top: 18px; left: 22px; z-index: 10;
+    display: flex; align-items: center; gap: 12px;
+  }
+  h1 {
+    font-family: "Mochiy Pop One", sans-serif;
+    font-size: 26px; color: #fff;
+    text-shadow: 0 2px 0 var(--pink-deep), 0 6px 14px rgba(240,98,146,.45);
+    letter-spacing: 1px;
+  }
+  #status {
+    padding: 5px 14px; border-radius: 999px;
+    background: var(--glass); border: 1.5px solid var(--glass-line);
+    backdrop-filter: blur(8px); box-shadow: var(--shadow);
+    font-size: 12.5px; font-weight: 700;
+  }
+  #status::before { content: "●  "; color: #bbb; }
+  #status.ok::before { color: var(--mint); }
+  #status.talk::before { color: var(--pink-deep); }
+
+  /* ---------- scene / outfit pickers ---------- */
+  #pickers {
+    position: fixed; top: 18px; right: 22px; z-index: 10;
+    display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+  }
+  .picker {
+    display: flex; gap: 6px; padding: 6px;
+    background: var(--glass); border: 1.5px solid var(--glass-line);
+    border-radius: 999px; backdrop-filter: blur(8px); box-shadow: var(--shadow);
+  }
+  .picker button {
+    border: 0; cursor: pointer; font-family: inherit; font-weight: 700;
+    font-size: 12.5px; color: var(--ink);
+    padding: 6px 13px; border-radius: 999px; background: transparent;
+    transition: background .15s, color .15s, transform .1s;
+  }
+  .picker button:hover { transform: translateY(-1px); background: rgba(255,255,255,.7); }
+  .picker button.on { background: var(--pink); color: #fff; box-shadow: 0 3px 8px rgba(240,98,146,.4); }
+
+  /* ---------- chat log ---------- */
+  #log {
+    position: fixed; left: 22px; bottom: 110px; z-index: 5;
+    width: min(320px, 38vw); max-height: 46vh;
+    overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+    padding: 4px; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 12%);
+            mask-image: linear-gradient(to bottom, transparent, black 12%);
+  }
+  .bub {
+    padding: 9px 14px; border-radius: 18px; font-size: 14px; line-height: 1.45;
+    backdrop-filter: blur(6px); box-shadow: 0 4px 12px rgba(93,65,87,.15);
+    animation: pop .25s cubic-bezier(.3, 1.4, .5, 1);
+    user-select: text; width: fit-content; max-width: 100%;
+  }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } }
+  .bub.her {
+    background: rgba(255,255,255,.88); border: 1.5px solid #ffd3e2;
+    border-bottom-left-radius: 6px;
+  }
+  .bub.her::before {
+    content: "Sakura ✿"; display: block; font-size: 10.5px; font-weight: 700;
+    color: var(--pink-deep); font-family: "Mochiy Pop One", sans-serif;
+  }
+  .bub.you {
+    background: rgba(126,214,165,.28); border: 1.5px solid rgba(126,214,165,.55);
+    align-self: flex-end; border-bottom-right-radius: 6px;
+  }
+
+  /* ---------- input bar ---------- */
+  #bar {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    z-index: 10; display: flex; align-items: center; gap: 10px;
+    width: min(620px, calc(100vw - 44px));
+    padding: 10px 10px 10px 22px;
+    background: var(--glass); border: 1.5px solid var(--glass-line);
+    border-radius: 999px; backdrop-filter: blur(10px); box-shadow: var(--shadow);
+  }
+  #msg {
+    flex: 1; border: 0; outline: 0; background: transparent;
+    font-family: inherit; font-size: 15px; color: var(--ink);
+  }
+  #msg::placeholder { color: #b99cae; }
+  #send, #mic {
+    border: 0; cursor: pointer; border-radius: 999px; flex-shrink: 0;
+    display: grid; place-items: center; transition: transform .1s, box-shadow .15s;
+  }
+  #send {
+    width: 42px; height: 42px; font-size: 18px;
+    background: var(--mint); color: #fff; box-shadow: 0 4px 10px rgba(126,214,165,.5);
+  }
+  #mic {
+    width: 54px; height: 54px; font-size: 24px;
+    background: var(--pink); color: #fff; box-shadow: 0 4px 14px rgba(240,98,146,.5);
+  }
+  #send:hover, #mic:hover { transform: scale(1.08); }
+  #mic.live {
+    background: var(--pink-deep);
+    animation: pulse 1.4s ease-out infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(240,98,146,.55); }
+    100% { box-shadow: 0 0 0 22px rgba(240,98,146,0); }
+  }
+
+  /* ---------- first-click overlay ---------- */
+  #boot {
+    position: fixed; inset: 0; z-index: 100; cursor: pointer;
+    display: grid; place-items: center;
+    background: rgba(255, 217, 232, .55); backdrop-filter: blur(6px);
+  }
+  #boot div {
+    font-family: "Mochiy Pop One", sans-serif; text-align: center;
+    font-size: 22px; color: var(--pink-deep);
+    padding: 26px 40px; border-radius: 30px;
+    background: var(--glass); border: 2px solid #fff; box-shadow: var(--shadow);
+    animation: breathe 2.5s ease-in-out infinite;
+  }
+  #boot small { display: block; margin-top: 8px; font-family: "Zen Maru Gothic"; font-size: 13px; color: var(--ink); }
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+
+  <div id="avatar">
+    <img id="m-closed" alt="Sakura">
+    <img id="m-half" alt="">
+    <img id="m-open" alt="">
+  </div>
+
+  <header>
+    <h1>Sakura ✿ Chat</h1>
+    <span id="status">connecting…</span>
+  </header>
+
+  <div id="pickers">
+    <div class="picker" id="bg-picker" title="Background"></div>
+    <div class="picker" id="outfit-picker" title="Outfit"></div>
+  </div>
+
+  <div id="log"></div>
+
+  <form id="bar">
+    <input id="msg" placeholder="Say something to Sakura…" autocomplete="off">
+    <button id="send" type="submit" title="Send">➤</button>
+    <button id="mic" type="button" title="Toggle voice chat">🎤</button>
+  </form>
+
+  <div id="boot"><div>✿ Sakura Chat ✿<small>click anywhere to start</small></div></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

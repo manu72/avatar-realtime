@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sakura",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": ["server.py"],
+      "port": 8787
+    }
+  ]
+}
