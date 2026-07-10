@@ -31,8 +31,47 @@ mic button and just talk. You can interrupt her mid-sentence by speaking.
   backgrounds removed so she composites over any scene. Two painted backgrounds
   plus a CSS-gradient one.
 
-## Switching looks
+## Personality
 
-Top-right chips: backgrounds (Bedroom / Sakura park / Dream gradient) and
-outfits (Seifuku / Sundress). Add your own by dropping a PNG into `assets/`
-and adding one line to `SPRITES` or `BACKGROUNDS` in `static/app.js`.
+Sakura’s character is the `PERSONA` string in `server.py` (around lines 34–38).
+It is passed to Gemini Live as `system_instruction` in `CONFIG`.
+
+Edit that string to change tone, length, quirks, or backstory — then restart
+the server. There is no separate prompt file or UI for this.
+
+## Memory
+
+Conversation memory is **not stored** in this app. Turns live only inside the
+active Gemini Live session for as long as the browser WebSocket stays open.
+
+- Refresh, close the tab, or restart the server → new session → blank slate.
+- The on-screen chat log in `static/app.js` is display-only (capped at ~40
+  bubbles); it is not fed back as history.
+- Long sessions use Gemini’s `context_window_compression` (sliding window in
+  `CONFIG`) to trim context on the API side — still not local persistence.
+
+## Voice model
+
+- **Model:** `models/gemini-3.1-flash-live-preview` (`MODEL` in `server.py`)
+- **Voice:** Gemini prebuilt voice `Leda` (`speech_config` → `voice_name`)
+- **Audio:** browser mic up at 16 kHz PCM; Sakura’s voice down at 24 kHz PCM
+
+Change the voice by editing `voice_name` in `CONFIG` (other Gemini Live
+prebuilt voices), then restart the server.
+
+## Visual characteristics
+
+Sakura is a pink-haired, green-eyed anime girl rendered as layered PNG sprites
+with transparent backgrounds so she composites over any scene.
+
+| Aspect | Details |
+| --- | --- |
+| Look | Long light-pink hair, bright green eyes (described in `PERSONA`; drawn in sprites) |
+| Mouth states | `closed` / `half` / `open` — lip-synced from playback RMS every ~40 ms |
+| Outfits | Seifuku (`uniform_*.png`) and Sundress (`casual_*.png`) under `assets/sprites/` |
+| Backgrounds | Bedroom, Sakura park (`assets/bg/`), plus a CSS “Dream” gradient |
+
+Sprites were generated with GPT Image 2 (base image, then image-to-image mouth
+and outfit edits). Switch looks with the top-right chips, or add your own by
+dropping a PNG into `assets/` and one line into `SPRITES` or `BACKGROUNDS` in
+`static/app.js`.
