@@ -20,13 +20,29 @@ const BACKGROUNDS = {
 
 const mouthImgs = { closed: $("#m-closed"), half: $("#m-half"), open: $("#m-open") };
 
+/* tell Sakura what she's wearing and where she is */
+let ws; // declared here: sendScene runs during initial setOutfit, before the websocket section
+let currentOutfit, currentBg, sceneTimer;
+const cleanLabel = (s) => s.replace(/[^\p{L}\p{N} ]/gu, "").trim(); // drop chip emoji
+function sendScene(announce = true) {
+  if (!ws || ws.readyState !== 1) return;
+  clearTimeout(sceneTimer); // debounce rapid chip-clicking into one update
+  sceneTimer = setTimeout(() => ws.send(JSON.stringify({
+    type: "scene", outfit: cleanLabel(currentOutfit), background: cleanLabel(currentBg), announce,
+  })), announce ? 600 : 0);
+}
+
 function setOutfit(name) {
   for (const [state, img] of Object.entries(mouthImgs)) img.src = SPRITES[name][state];
   markOn("#outfit-picker", name);
+  currentOutfit = name;
+  sendScene();
 }
 function setBackground(name) {
   $("#stage").style.backgroundImage = BACKGROUNDS[name];
   markOn("#bg-picker", name);
+  currentBg = name;
+  sendScene();
 }
 function markOn(pickerSel, name) {
   for (const b of document.querySelectorAll(pickerSel + " button"))
@@ -62,11 +78,10 @@ const statusEl = $("#status");
 function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = cls || ""; }
 
 /* ---------- websocket ---------- */
-let ws;
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => setStatus("ready — talk to me!", "ok");
+  ws.onopen = () => { setStatus("ready — talk to me!", "ok"); sendScene(false); };
   ws.onclose = () => { setStatus("reconnecting…"); setTimeout(connect, 1500); };
   ws.onmessage = (e) => {
     if (e.data instanceof ArrayBuffer) return playChunk(e.data);

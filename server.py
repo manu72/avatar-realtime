@@ -105,6 +105,18 @@ async def ws_handler(request):
                             turns=types.Content(role="user", parts=[types.Part(text=data["text"])]),
                             turn_complete=True,
                         )
+                    elif data.get("type") == "scene":
+                        note = (
+                            f"[Scene update: you are wearing your {data.get('outfit', '?')} outfit "
+                            f"and you are at this location: {data.get('background', '?')}.]"
+                        )
+                        if data.get("announce"):
+                            note += " React with one short, cheerful in-character line about your new look or surroundings."
+                        # announce=False just adds context without triggering a spoken reply
+                        await session.send_client_content(
+                            turns=types.Content(role="user", parts=[types.Part(text=note)]),
+                            turn_complete=bool(data.get("announce")),
+                        )
         finally:
             pump.cancel()
     return ws
@@ -121,4 +133,4 @@ app.router.add_static("/static", ROOT / "static")
 app.router.add_static("/assets", ROOT / "assets")
 
 if __name__ == "__main__":
-    web.run_app(app, host="127.0.0.1", port=8787)
+    web.run_app(app, host="127.0.0.1", port=int(os.environ.get("PORT", 8787)))
