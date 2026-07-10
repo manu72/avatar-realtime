@@ -198,6 +198,11 @@ function stopMic() {
 micBtn.onclick = () => (micCtx ? stopMic() : startMic().catch((e) => setStatus("mic blocked: " + e.message)));
 
 /* ---------- text input ---------- */
+// explicit Enter-to-send: implicit form submission is unreliable in embedded browsers
+$("#msg").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("#bar").requestSubmit(); }
+});
+
 $("#bar").onsubmit = (e) => {
   e.preventDefault();
   const input = $("#msg");
@@ -222,8 +227,8 @@ for (let i = 0; i < 10; i++) {
 }
 
 /* ---------- boot: browsers require a gesture before audio ---------- */
-$("#boot").onclick = () => {
-  $("#boot").remove();
+/* called by the overlay's inline onclick in index.html */
+window.bootApp = () => {
   ensurePlayCtx();
   playCtx.resume();
   connect();

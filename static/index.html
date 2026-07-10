@@ -224,8 +224,13 @@
     <button id="mic" type="button" title="Toggle voice chat">🎤</button>
   </form>
 
-  <div id="boot"><div>✿ Sakura Chat ✿<small>click anywhere to start</small></div></div>
+  <!-- inline onclick so the overlay can never trap clicks if app.js fails to load -->
+  <div id="boot" onclick="this.remove(); window.bootApp && window.bootApp()"><div>✿ Sakura Chat ✿<small>click anywhere to start</small></div></div>
 
+  <script>
+    if (location.protocol === "file:")
+      document.getElementById("status").textContent = "run server.py, then open http://127.0.0.1:8787";
+  </script>
   <script src="/static/app.js"></script>
 </body>
 </html>
