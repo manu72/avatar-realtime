@@ -270,7 +270,14 @@ function renderMemory(view) {
 
 async function openMemory() {
   memModal.hidden = false;
-  renderMemory(await (await fetch("/memory")).json());
+  try {
+    const r = await fetch("/memory");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    renderMemory(await r.json());
+  } catch (e) { // e.g. the server is still running pre-memory code
+    $("#mem-view").textContent =
+      "Couldn't load memory (" + e.message + "). Restart server.py and reload the page.";
+  }
 }
 $("#mem-btn").onclick = openMemory;
 $("#mem-close").onclick = () => { memModal.hidden = true; };
