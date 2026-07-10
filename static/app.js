@@ -268,29 +268,43 @@ function renderMemory(view) {
   $("#mem-json").value = JSON.stringify(m, null, 2);
 }
 
-async function openMemory() {
-  memModal.hidden = false;
+// XMLHttpRequest instead of fetch: some browser extensions monkey-patch
+// window.fetch and can leave its promise pending forever; XHR is rarely touched
+function api(method, url, body) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open(method, url);
+    x.timeout = 5000;
+    x.onload = () => (x.status < 300 ? resolve(JSON.parse(x.responseText)) : reject(new Error("HTTP " + x.status)));
+    x.onerror = () => reject(new Error("network error"));
+    x.ontimeout = () => reject(new Error("timed out"));
+    x.send(body);
+  });
+}
+
+async function memoryAction(fn) {
   try {
-    const r = await fetch("/memory");
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    renderMemory(await r.json());
+    renderMemory(await fn());
   } catch (e) { // e.g. the server is still running pre-memory code
     $("#mem-view").textContent =
       "Couldn't load memory (" + e.message + "). Restart server.py and reload the page.";
   }
 }
-$("#mem-btn").onclick = openMemory;
-$("#mem-close").onclick = () => { memModal.hidden = true; };
-$("#mem-clear").onclick = async () => {
-  if (!confirm("Sakura will forget everything about you. Sure?")) return;
-  await fetch("/memory/clear", { method: "POST" });
-  renderMemory(await (await fetch("/memory")).json());
+
+$("#mem-btn").onclick = () => {
+  memModal.hidden = false;
+  memoryAction(() => api("GET", "/memory"));
 };
-$("#mem-save").onclick = async () => {
+$("#mem-close").onclick = () => { memModal.hidden = true; };
+memModal.onclick = (e) => { if (e.target === memModal) memModal.hidden = true; }; // click outside card closes
+$("#mem-clear").onclick = () => {
+  if (!confirm("Sakura will forget everything about you. Sure?")) return;
+  memoryAction(async () => { await api("POST", "/memory/clear"); return api("GET", "/memory"); });
+};
+$("#mem-save").onclick = () => {
   let doc;
   try { doc = JSON.parse($("#mem-json").value); } catch { return alert("That's not valid JSON."); }
-  const view = await (await fetch("/memory", { method: "PUT", body: JSON.stringify(doc) })).json();
-  renderMemory(view);
+  memoryAction(() => api("PUT", "/memory", JSON.stringify(doc)));
 };
 
 /* ---------- petals ---------- */
