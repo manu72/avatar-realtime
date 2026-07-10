@@ -68,8 +68,8 @@ with transparent backgrounds so she composites over any scene.
 | --- | --- |
 | Look | Long light-pink hair, bright green eyes (described in `PERSONA`; drawn in sprites) |
 | Mouth states | `closed` / `half` / `open` — lip-synced from playback RMS every ~40 ms |
-| Outfits | Seifuku (`uniform_*.png`) and Sundress (`casual_*.png`) under `assets/sprites/` |
-| Backgrounds | Bedroom, Sakura park (`assets/bg/`), plus a CSS “Dream” gradient |
+| Outfits | Seifuku (`uniform_*.png`), Sundress (`casual_*.png`), Swimsuit (`swim_*.png`), Gym (`gym_*.png`) under `assets/sprites/` |
+| Backgrounds | Bedroom, Sakura park, Beach, Mt Fuji, Onsen (`assets/bg/`), plus a CSS “Dream” gradient |
 
 Sprites were generated with GPT Image 2 (base image, then image-to-image mouth
 and outfit edits). Switch looks with the top-right chips, or add your own by

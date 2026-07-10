@@ -6,10 +6,15 @@ const $ = (s) => document.querySelector(s);
 const SPRITES = {
   "Seifuku 🎀":  { closed: "/assets/sprites/uniform_closed.png", half: "/assets/sprites/uniform_half.png", open: "/assets/sprites/uniform_open.png" },
   "Sundress 🌿": { closed: "/assets/sprites/casual_closed.png",  half: "/assets/sprites/casual_half.png",  open: "/assets/sprites/casual_open.png" },
+  "Swimsuit 🩱": { closed: "/assets/sprites/swim_closed.png",    half: "/assets/sprites/swim_half.png",    open: "/assets/sprites/swim_open.png" },
+  "Gym 🏃‍♀️":     { closed: "/assets/sprites/gym_closed.png",     half: "/assets/sprites/gym_half.png",     open: "/assets/sprites/gym_open.png" },
 };
 const BACKGROUNDS = {
   "Bedroom 🛏":  "url(/assets/bg/bedroom.png)",
   "Sakura 🌸":  "url(/assets/bg/sakura.png)",
+  "Beach 🏖":   "url(/assets/bg/beach.png)",
+  "Fuji 🗻":    "url(/assets/bg/fuji.png)",
+  "Onsen ♨️":   "url(/assets/bg/onsen.png)",
   "Dream ☁️":   "linear-gradient(160deg,#ffd9e8 0%,#e8d9ff 50%,#d0f4e0 100%)",
 };
 
