@@ -41,14 +41,50 @@ the server. There is no separate prompt file or UI for this.
 
 ## Memory
 
-Conversation memory is **not stored** in this app. Turns live only inside the
-active Gemini Live session for as long as the browser WebSocket stays open.
+Sakura keeps a lightweight persistent memory per anonymous visitor (`memory.py`,
+SQLite via stdlib `sqlite3`, stored in `sakura.db` next to `server.py` —
+override with `SAKURA_DB_PATH`).
 
-- Refresh, close the tab, or restart the server → new session → blank slate.
-- The on-screen chat log in `static/app.js` is display-only (capped at ~40
-  bubbles); it is not fed back as history.
-- Long sessions use Gemini’s `context_window_compression` (sliding window in
-  `CONFIG`) to trim context on the API side — still not local persistence.
+**How it works**
+
+- Each browser gets a random anonymous ID in a long-lived `sakura_uid` cookie
+  (no accounts). A missing or mangled cookie just gets a fresh ID.
+- When a WebSocket session starts, the user's compact memory document is loaded
+  **once**, formatted into a bounded plain-text block (≤ ~1k tokens), and
+  appended to `PERSONA` as part of the Gemini Live `system_instruction`.
+  Memory is never queried again during the conversation, so the real-time
+  voice path is untouched.
+- Completed text transcript turns (user + Sakura, no audio, no streaming
+  fragments) are saved per session with start/end timestamps.
+- After a session disconnects — and additionally every
+  `SAKURA_UPDATE_TURN_THRESHOLD` (default 12) completed turns — a background
+  task sends the old memory plus only the *unprocessed* turns to a fast Gemini
+  text model (`SAKURA_MEMORY_MODEL`, default `gemini-2.5-flash`) which returns
+  a complete replacement memory document. A per-user lock plus a `processed`
+  marker on each turn guarantee every turn is folded in at most once, even on
+  duplicate disconnects. If extraction fails, the old memory is kept unchanged.
+
+**What is retained**: facts you explicitly stated, durable preferences,
+recurring projects/topics, open threads, plus a short relationship summary —
+all size-capped (`SAKURA_MAX_FACTS` 15, `SAKURA_MAX_PREFERENCES` 10,
+`SAKURA_MAX_PROJECTS` 8, `SAKURA_MAX_SUMMARY_CHARS` 600). Not retained:
+inferences/guesses, Sakura's own claims, small talk, duplicates.
+
+**Inspect / edit / clear**: click the 🧠 button in the app (or
+`GET /memory`, `PUT /memory`, `POST /memory/clear`) — always scoped to your
+own cookie. Changes apply from the next session.
+
+**Privacy**: memories and recent text transcripts are stored as plain text in
+a local SQLite file on the server — not encrypted, not synced anywhere. No
+audio, cookies, or API keys are stored in memory documents.
+
+**Limitations**: identity is per-browser (clear cookies → Sakura forgets you);
+extraction quality depends on the text model; memory written by a session that
+ends while the server is shutting down may be lost; the on-screen chat log is
+still display-only.
+
+Tests: `.venv/bin/python -m unittest test_memory -v` (extraction is mocked; no
+API access needed).
 
 ## Voice model
 

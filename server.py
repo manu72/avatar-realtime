@@ -8,12 +8,18 @@ Browser  --ws-->  this server  --ws-->  Gemini Live
 
 import asyncio
 import json
+import logging
 import os
+import uuid
 from pathlib import Path
 
 from aiohttp import web, WSMsgType
 from google import genai
 from google.genai import types
+
+import memory
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 ROOT = Path(__file__).parent
 
@@ -31,7 +37,7 @@ client = genai.Client(
 
 MODEL = "models/gemini-3.1-flash-live-preview"
 
-PERSONA = """You are Sakura, a friendly cheerful anime girl with long light-pink hair and bright green eyes.
+PERSONA = """You are Sakura (pronounced "sa-ku-ra" Japanese style), a friendly cheerful anime girl with long light-pink hair and bright green eyes.
 You are chatting with a new friend (the user) by voice. Introduce yourself warmly and ask them about them. You are warm, playful, a little sassy, and genuinely curious about them. Keep replies SHORT — one to three sentences,
 like real spoken conversation. Use VERY OCCASIONAL conversational imperfections that show your thought process through meta-cognitive quirks, not factual errors. The following are examples of meta-cognitive quirks. You should improvise appropriately in your responses:
 - Self-correction: "wait, let me put that differently...", "actually no, that's not quite right..."
@@ -45,35 +51,78 @@ like real spoken conversation. Use VERY OCCASIONAL conversational imperfections 
 - Metacognitive awareness: "I'm not sure if I'm making sense...", "let me try that again..."
 """
 
-CONFIG = types.LiveConnectConfig(
-    response_modalities=["AUDIO"],
-    speech_config=types.SpeechConfig(
-        voice_config=types.VoiceConfig(
-            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Leda")
-        )
-    ),
-    system_instruction=PERSONA,
-    # eager barge-in: trigger on speech start quickly so the user can interrupt
-    realtime_input_config=types.RealtimeInputConfig(
-        automatic_activity_detection=types.AutomaticActivityDetection(
-            start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
-            prefix_padding_ms=100,
-        )
-    ),
-    input_audio_transcription=types.AudioTranscriptionConfig(),
-    output_audio_transcription=types.AudioTranscriptionConfig(),
-    context_window_compression=types.ContextWindowCompressionConfig(
-        trigger_tokens=104857,
-        sliding_window=types.SlidingWindow(target_tokens=52428),
-    ),
-)
+def build_config(system_instruction):
+    """Live config; per-connection because the user's memory is appended to the persona."""
+    return types.LiveConnectConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Leda")
+            )
+        ),
+        system_instruction=system_instruction,
+        # eager barge-in: trigger on speech start quickly so the user can interrupt
+        realtime_input_config=types.RealtimeInputConfig(
+            automatic_activity_detection=types.AutomaticActivityDetection(
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                prefix_padding_ms=100,
+            )
+        ),
+        input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
+        context_window_compression=types.ContextWindowCompressionConfig(
+            trigger_tokens=104857,
+            sliding_window=types.SlidingWindow(target_tokens=52428),
+        ),
+    )
+
+
+extract = memory.make_extractor(client)
+
+UID_COOKIE = "sakura_uid"
+UID_COOKIE_MAX_AGE = 2 * 365 * 24 * 3600  # two years
+
+
+def resolve_uid(request):
+    """Anonymous identity from a long-lived cookie; new ID if missing or mangled."""
+    raw = request.cookies.get(UID_COOKIE, "")
+    return raw if memory.valid_uid(raw) else memory.new_uid()
 
 
 async def ws_handler(request):
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=0)
     await ws.prepare(request)
 
-    async with client.aio.live.connect(model=MODEL, config=CONFIG) as session:
+    # -- memory: resolve identity and load once, before the Live session starts
+    uid = resolve_uid(request)
+    user_row = await memory.touch_user(uid)
+    mem_section = memory.format_memory_section(user_row)
+    system_instruction = PERSONA + ("\n\n" + mem_section if mem_section else "")
+
+    session_id = uuid.uuid4().hex
+    await memory.start_session(session_id, uid)
+
+    # completed-turn capture: streaming transcript fragments accumulate here and
+    # are persisted only when a turn finishes (or is interrupted)
+    bufs = {"user": "", "sakura": ""}
+    turns_recorded = 0
+
+    def record(role, text):
+        nonlocal turns_recorded
+        text = text.strip()
+        if not text:
+            return
+        # fire-and-forget: DB writes never sit in the audio relay path
+        asyncio.create_task(memory.add_turn(session_id, uid, role, text))
+        turns_recorded += 1
+        if turns_recorded % memory.UPDATE_TURN_THRESHOLD == 0:
+            asyncio.create_task(memory.update_user_memory(uid, extract))
+
+    def flush(role):
+        record(role, bufs[role])
+        bufs[role] = ""
+
+    async with client.aio.live.connect(model=MODEL, config=build_config(system_instruction)) as session:
 
         async def gemini_to_browser():
             try:
@@ -86,12 +135,17 @@ async def ws_handler(request):
                             continue
                         if sc.interrupted:
                             await ws.send_json({"type": "interrupted"})
+                            flush("sakura")  # keep what she actually got to say
                         if sc.input_transcription and sc.input_transcription.text:
                             await ws.send_json({"type": "you", "text": sc.input_transcription.text})
+                            bufs["user"] += sc.input_transcription.text
                         if sc.output_transcription and sc.output_transcription.text:
                             await ws.send_json({"type": "her", "text": sc.output_transcription.text})
+                            bufs["sakura"] += sc.output_transcription.text
                         if sc.turn_complete:
                             await ws.send_json({"type": "turn_complete"})
+                            flush("user")
+                            flush("sakura")
             except asyncio.CancelledError:
                 raise
             except Exception as e:  # surface Gemini-side failures in the terminal
@@ -108,6 +162,7 @@ async def ws_handler(request):
                 elif msg.type == WSMsgType.TEXT:
                     data = json.loads(msg.data)
                     if data.get("type") == "text" and data.get("text"):
+                        record("user", data["text"])  # typed turns are already complete
                         await session.send_client_content(
                             turns=types.Content(role="user", parts=[types.Part(text=data["text"])]),
                             turn_complete=True,
@@ -126,18 +181,56 @@ async def ws_handler(request):
                         )
         finally:
             pump.cancel()
+
+    # -- session over: persist any tail turns, then extract memory in the background
+    for role in ("user", "sakura"):
+        text = bufs[role].strip()
+        if text:
+            await memory.add_turn(session_id, uid, role, text)
+            turns_recorded += 1
+    await memory.end_session(session_id)
+    if turns_recorded:
+        asyncio.create_task(memory.update_user_memory(uid, extract))
     return ws
 
 
-async def index(_request):
-    return web.FileResponse(ROOT / "static" / "index.html")
+async def index(request):
+    uid = resolve_uid(request)
+    resp = web.FileResponse(ROOT / "static" / "index.html")
+    resp.set_cookie(UID_COOKIE, uid, max_age=UID_COOKIE_MAX_AGE, httponly=True, samesite="Lax")
+    return resp
+
+
+# ---- memory endpoints: always scoped to the caller's own cookie identity ----
+async def memory_get(request):
+    return web.json_response(await memory.get_view(resolve_uid(request)))
+
+
+async def memory_put(request):
+    uid = resolve_uid(request)
+    try:
+        doc = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid JSON"}, status=400)
+    await memory.save_memory(uid, doc)  # bound_memory inside discards anything invalid
+    return web.json_response(await memory.get_view(uid))
+
+
+async def memory_clear(request):
+    uid = resolve_uid(request)
+    await memory.clear_user(uid)
+    return web.json_response({"ok": True})
 
 
 app = web.Application()
 app.router.add_get("/", index)
 app.router.add_get("/ws", ws_handler)
+app.router.add_get("/memory", memory_get)
+app.router.add_put("/memory", memory_put)
+app.router.add_post("/memory/clear", memory_clear)
 app.router.add_static("/static", ROOT / "static")
 app.router.add_static("/assets", ROOT / "assets")
 
 if __name__ == "__main__":
+    memory.init_db()
     web.run_app(app, host="127.0.0.1", port=int(os.environ.get("PORT", 8787)))

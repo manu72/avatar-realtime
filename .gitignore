@@ -1,2 +1,4 @@
 .env
 .venv/
+sakura.db*
+__pycache__/

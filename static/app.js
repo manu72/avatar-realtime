@@ -247,6 +247,45 @@ $("#bar").onsubmit = (e) => {
   input.value = "";
 };
 
+/* ---------- memory panel ---------- */
+const memModal = $("#mem-modal");
+memModal.hidden = true;
+
+function renderMemory(view) {
+  const m = view.memory, p = m.profile;
+  const row = (label, val) => (val && val.length ? `<dt>${label}</dt><dd>${Array.isArray(val) ? val.map(v => "• " + v).join("<br>") : val}</dd>` : "");
+  $("#mem-view").innerHTML =
+    `<dl>` +
+    `<dt>Chats so far</dt><dd>${view.interaction_count}${view.first_seen_at ? " (first met " + view.first_seen_at.slice(0, 10) + ")" : ""}</dd>` +
+    row("Your name", p.preferred_name) +
+    row("Facts", p.facts) +
+    row("Preferences", p.preferences) +
+    row("Projects & topics", p.projects) +
+    row("Relationship notes", m.relationship_summary) +
+    `</dl>` +
+    (!p.preferred_name && !p.facts.length && !p.preferences.length && !p.projects.length && !m.relationship_summary
+      ? "<p>Nothing yet — Sakura writes her notes shortly after each chat ends.</p>" : "");
+  $("#mem-json").value = JSON.stringify(m, null, 2);
+}
+
+async function openMemory() {
+  memModal.hidden = false;
+  renderMemory(await (await fetch("/memory")).json());
+}
+$("#mem-btn").onclick = openMemory;
+$("#mem-close").onclick = () => { memModal.hidden = true; };
+$("#mem-clear").onclick = async () => {
+  if (!confirm("Sakura will forget everything about you. Sure?")) return;
+  await fetch("/memory/clear", { method: "POST" });
+  renderMemory(await (await fetch("/memory")).json());
+};
+$("#mem-save").onclick = async () => {
+  let doc;
+  try { doc = JSON.parse($("#mem-json").value); } catch { return alert("That's not valid JSON."); }
+  const view = await (await fetch("/memory", { method: "PUT", body: JSON.stringify(doc) })).json();
+  renderMemory(view);
+};
+
 /* ---------- petals ---------- */
 for (let i = 0; i < 10; i++) {
   const p = document.createElement("span");
