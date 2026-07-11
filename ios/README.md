@@ -86,8 +86,10 @@ backend instead.
 4. Plug in the iPhone, select it as the run destination, press Run.
 5. First install: on the phone, Settings ▸ General ▸ VPN & Device
    Management ▸ trust your developer certificate.
-6. Launch, tap **Tap to meet Sakura**, tap the mic button, grant microphone
-   permission, and talk.
+6. Launch and tap **Tap to meet Sakura** — the microphone permission prompt
+   appears immediately (audio can't start without it: the engine is
+   deliberately not initialised until permission resolves). Grant it, then
+   tap the mic button and talk.
 7. Test interruption: talk over her mid-reply — playback should cut within
    ~100 ms and she should yield.
 8. Test memory: mention your name, chat a few turns, kill the app, reopen —
@@ -135,6 +137,12 @@ parsing/encoding. No test touches the network or needs an API key.
   exhausted; check the key in AI Studio.
 - **She can't hear you** — mic permission denied; Settings ▸ Sakura ▸
   Microphone.
+- **"Audio couldn't start" / console shows `561015905` ('!pla')** — the
+  engine tried to initialise a `.playAndRecord` route it can't open. The app
+  starts audio only after permission is granted and rebuilds the graph on
+  route changes; if it still fails, disconnect Bluetooth audio, quit other
+  audio apps, and tap again. Audio lifecycle logs are under subsystem
+  `com.throwingeights.sakura`, category `audio`, in Console.app.
 - **Echo / self-interruption** — confirm nothing switched the session out of
   `.voiceChat` mode (e.g. another audio app); relaunch.
 - **No audio out on device but transcript works** — check the silent/ring

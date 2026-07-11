@@ -24,6 +24,7 @@ final class SessionViewModel: ObservableObject {
     @Published var micLive = false
     @Published var sessionStarted = false
     @Published var apiKeyMissing = false
+    @Published var audioError: String?   // fatal audio-init failure, shown as an alert
 
     let memory: MemoryStore
 
@@ -50,15 +51,36 @@ final class SessionViewModel: ObservableObject {
             return
         }
         guard !sessionStarted else { return }
-        wantsSession = true
-        sessionStarted = true
+        Task { await startSessionResolvingAudio() }
+    }
+
+    /// Device-safe order: resolve mic permission FIRST, then bring the audio
+    /// engine up, and only connect to Gemini once audio is actually running.
+    /// Starting a .playAndRecord engine before permission resolves fails on
+    /// physical iPhones with '!pla' (561015905).
+    private func startSessionResolvingAudio() async {
+        setStatus("requesting microphone…", .idle)
+        guard await AVAudioApplication.requestRecordPermission() else {
+            audioError = "Sakura needs the microphone for voice chat. Allow it in Settings ▸ Sakura ▸ Microphone, then tap again."
+            setStatus("mic blocked", .error)
+            return
+        }
         do {
             try audio.start()
         } catch {
-            setStatus("audio failed: \(error.localizedDescription)", .error)
+            audioError = error.localizedDescription
+            setStatus("audio failed", .error)
+            return  // no session without working audio — tap again to retry
         }
+        wantsSession = true
+        sessionStarted = true
         audio.onMicChunk = { [weak self] data, _ in
             self?.client?.sendAudioChunk(data)   // workQueue → URLSession; never blocks audio
+        }
+        audio.onRuntimeFailure = { [weak self] message in
+            Task { @MainActor in
+                self?.setStatus("audio lost: \(message)", .error)
+            }
         }
         startMouthTimer()
         connect()
@@ -102,7 +124,8 @@ final class SessionViewModel: ObservableObject {
     func enterForeground() {
         guard wantsSession, client == nil else { return }
         do { try audio.start() } catch {
-            setStatus("audio failed: \(error.localizedDescription)", .error)
+            audioError = error.localizedDescription
+            setStatus("audio failed", .error)
             return
         }
         connect()  // mic stays off until re-tapped, mirroring a fresh page load
