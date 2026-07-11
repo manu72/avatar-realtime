@@ -2,3 +2,4 @@
 .venv/
 sakura.db*
 __pycache__/
+.DS_Store

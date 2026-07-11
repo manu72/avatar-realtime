@@ -1,0 +1,124 @@
+import Foundation
+
+/// Codable mirrors of the Gemini Live WebSocket protocol
+/// (v1beta BidiGenerateContent). Only the fields Sakura uses.
+
+struct EmptyObject: Codable {}
+
+struct TextContent: Codable {
+    var role: String?
+    var parts: [Part]
+    struct Part: Codable { var text: String }
+
+    static func user(_ text: String) -> TextContent {
+        TextContent(role: "user", parts: [Part(text: text)])
+    }
+}
+
+// MARK: - Client → server
+
+struct ClientMessage: Encodable {
+    var setup: Setup?
+    var realtimeInput: RealtimeInput?
+    var clientContent: ClientContent?
+
+    struct Setup: Encodable {
+        var model: String
+        var generationConfig: GenerationConfig
+        var systemInstruction: TextContent
+        var realtimeInputConfig: RealtimeInputConfig
+        var inputAudioTranscription = EmptyObject()
+        var outputAudioTranscription = EmptyObject()
+        var contextWindowCompression: ContextWindowCompression
+
+        struct GenerationConfig: Encodable {
+            var responseModalities: [String]
+            var speechConfig: SpeechConfig
+        }
+        struct SpeechConfig: Encodable {
+            var voiceConfig: VoiceConfig
+            struct VoiceConfig: Encodable {
+                var prebuiltVoiceConfig: Prebuilt
+                struct Prebuilt: Encodable { var voiceName: String }
+            }
+        }
+        struct RealtimeInputConfig: Encodable {
+            var automaticActivityDetection: Detection
+            struct Detection: Encodable {
+                var startOfSpeechSensitivity: String
+                var prefixPaddingMs: Int
+            }
+        }
+        struct ContextWindowCompression: Encodable {
+            var triggerTokens: Int
+            var slidingWindow: SlidingWindow
+            struct SlidingWindow: Encodable { var targetTokens: Int }
+        }
+
+        /// Mirrors build_config() in server.py: audio out, Leda voice,
+        /// eager barge-in VAD, both transcriptions, context compression.
+        static func sakura(systemInstruction: String) -> Setup {
+            Setup(
+                model: Sakura.liveModel,
+                generationConfig: GenerationConfig(
+                    responseModalities: ["AUDIO"],
+                    speechConfig: SpeechConfig(
+                        voiceConfig: .init(prebuiltVoiceConfig: .init(voiceName: Sakura.voiceName))
+                    )
+                ),
+                systemInstruction: TextContent(role: nil, parts: [.init(text: systemInstruction)]),
+                realtimeInputConfig: RealtimeInputConfig(
+                    automaticActivityDetection: .init(
+                        startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+                        prefixPaddingMs: 100
+                    )
+                ),
+                contextWindowCompression: ContextWindowCompression(
+                    triggerTokens: 104_857,
+                    slidingWindow: .init(targetTokens: 52_428)
+                )
+            )
+        }
+    }
+
+    struct RealtimeInput: Encodable {
+        var audio: Blob
+        struct Blob: Encodable {
+            var data: String      // base64 pcm16
+            var mimeType: String  // "audio/pcm;rate=16000"
+        }
+    }
+
+    struct ClientContent: Encodable {
+        var turns: [TextContent]
+        var turnComplete: Bool
+    }
+}
+
+// MARK: - Server → client
+
+struct ServerMessage: Decodable {
+    var setupComplete: EmptyObject?
+    var serverContent: ServerContent?
+    var goAway: GoAway?
+
+    struct ServerContent: Decodable {
+        var modelTurn: ModelTurn?
+        var interrupted: Bool?
+        var turnComplete: Bool?
+        var generationComplete: Bool?
+        var inputTranscription: Transcription?
+        var outputTranscription: Transcription?
+    }
+    struct ModelTurn: Decodable { var parts: [Part]? }
+    struct Part: Decodable {
+        var text: String?
+        var inlineData: InlineData?
+        struct InlineData: Decodable {
+            var mimeType: String?
+            var data: String?  // base64 pcm16 @ 24 kHz
+        }
+    }
+    struct Transcription: Decodable { var text: String? }
+    struct GoAway: Decodable { var timeLeft: String? }
+}
