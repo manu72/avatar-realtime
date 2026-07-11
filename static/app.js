@@ -46,6 +46,10 @@ const mouthImgs = { closed: $("#m-closed"), half: $("#m-half"), open: $("#m-open
 let ws; // declared here: sendScene runs during initial setOutfit, before the websocket section
 let currentOutfit, currentBg, sceneTimer;
 const cleanLabel = (s) => s.replace(/[^\p{L}\p{N} ]/gu, "").trim(); // drop chip emoji
+// Sakura's own scene tools send clean names ("Swimsuit"); map back to chip labels
+const byCleanName = (keys) => Object.fromEntries(keys.map((k) => [cleanLabel(k), k]));
+const OUTFIT_LABELS = byCleanName(Object.keys(SPRITES));
+const BG_LABELS = byCleanName(Object.keys(BACKGROUNDS));
 function sendScene(announce = true) {
   if (!ws || ws.readyState !== 1) return;
   clearTimeout(sceneTimer); // debounce rapid chip-clicking into one update
@@ -63,17 +67,17 @@ function sendScene(announce = true) {
   );
 }
 
-function setOutfit(name) {
+function setOutfit(name, silent) {
   for (const [state, img] of Object.entries(mouthImgs)) img.src = SPRITES[name][state];
   markOn("#outfit-picker", name);
   currentOutfit = name;
-  sendScene();
+  if (!silent) sendScene(); // silent = Sakura changed it herself; no echo back to her
 }
-function setBackground(name) {
+function setBackground(name, silent) {
   $("#stage").style.backgroundImage = BACKGROUNDS[name];
   markOn("#bg-picker", name);
   currentBg = name;
-  sendScene();
+  if (!silent) sendScene();
 }
 function markOn(pickerSel, name) {
   for (const b of document.querySelectorAll(pickerSel + " button")) b.classList.toggle("on", b.textContent === name);
@@ -135,6 +139,11 @@ function connect() {
     else if (m.type === "turn_complete") {
       bubbles.you = bubbles.her = null;
     } else if (m.type === "you" || m.type === "her") appendTranscript(m.type, m.text);
+    else if (m.type === "set_scene") {
+      // server already validated against the allow-list; unknown names are ignored anyway
+      if (OUTFIT_LABELS[m.outfit]) setOutfit(OUTFIT_LABELS[m.outfit], true);
+      if (BG_LABELS[m.background]) setBackground(BG_LABELS[m.background], true);
+    }
   };
 }
 

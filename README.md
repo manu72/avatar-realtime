@@ -67,14 +67,36 @@ single-writer — run **one replica**.
   RMS loudness of whatever is currently playing and picks one of three mouth
   sprites (closed / half / open) every 40 ms.
 - **`assets/`** — character sprites generated with GPT Image 2: one base image,
-  then image-to-image edits that change _only_ the mouth (and one outfit swap),
-  backgrounds removed so she composites over any scene. Two painted backgrounds
-  plus a CSS-gradient one.
+  then image-to-image edits that change _only_ the mouth (and outfit swaps),
+  backgrounds removed so she composites over any scene. Six painted backgrounds.
+
+## Project structure
+
+```
+server.py              aiohttp server: static files, /ws relay, /health, /memory API
+memory.py              SQLite persistence + Gemini text extraction (stdlib sqlite3)
+test_memory.py         unit tests for memory.py (extraction mocked, no API needed)
+requirements.txt       google-genai + aiohttp (the only dependencies)
+railway.json           Railway deploy config (start command, health check)
+.python-version        Python 3.12 (used by Railway's builder)
+static/
+  index.html           single page: layout, styling, boot overlay
+  app.js               mic worklet, playback, lip sync, pickers, memory panel
+assets/
+  sprites/*.webp       mouth frames per outfit (closed/half/open)
+  bg/*.webp            painted background scenes
+ios/                   independent native SwiftUI app (own README, own tests);
+                       talks directly to Gemini Live, never uses server.py
+RAILWAY_DEPLOYMENT.md  step-by-step Railway guide
+sakura.db              created at runtime (gitignored), location configurable
+```
 
 ## Personality
 
-Sakura’s character is the `PERSONA` string in `server.py` (around lines 34–38).
-It is passed to Gemini Live as `system_instruction` in `CONFIG`.
+Sakura’s character is the `PERSONA` string in `server.py`. Each WebSocket
+connection passes it to Gemini Live as `system_instruction` (built per
+connection by `build_config()`, with the caller's memory notes appended when
+they exist).
 
 Edit that string to change tone, length, quirks, or backstory — then restart
 the server. There is no separate prompt file or UI for this.
@@ -119,9 +141,9 @@ a local SQLite file on the server — not encrypted, not synced anywhere. No
 audio, cookies, or API keys are stored in memory documents.
 
 **Limitations**: identity is per-browser (clear cookies → Sakura forgets you);
-extraction quality depends on the text model; memory written by a session that
-ends while the server is shutting down may be lost; the on-screen chat log is
-still display-only.
+extraction quality depends on the text model; graceful shutdown flushes pending
+memory writes (a hard kill can still lose the last extraction); the on-screen
+chat log is still display-only.
 
 Tests: `.venv/bin/python -m unittest test_memory -v` (extraction is mocked; no
 API access needed).
@@ -132,8 +154,8 @@ API access needed).
 - **Voice:** Gemini prebuilt voice `Leda` (`speech_config` → `voice_name`)
 - **Audio:** browser mic up at 16 kHz PCM; Sakura’s voice down at 24 kHz PCM
 
-Change the voice by editing `voice_name` in `CONFIG` (other Gemini Live
-prebuilt voices), then restart the server.
+Change the voice by editing `voice_name` in `build_config()` in `server.py`
+(other Gemini Live prebuilt voices), then restart the server.
 
 ## Visual characteristics
 
@@ -144,8 +166,8 @@ with transparent backgrounds so she composites over any scene.
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | Look         | Long light-pink hair, bright green eyes (described in `PERSONA`; drawn in sprites)                                               |
 | Mouth states | `closed` / `half` / `open` — lip-synced from playback RMS every ~40 ms                                                           |
-| Outfits      | Seifuku (`uniform_*.webp`), Sundress (`casual_*.webp`), Swimsuit (`swim_*.webp`), Gymwear (`gym_*.webp`) under `assets/sprites/` |
-| Backgrounds  | Bedroom, Sakura park, Beach, Mt Fuji, Onsen (`assets/bg/`), plus a CSS “Dream” gradient                                          |
+| Outfits      | Gymwear (`gym_*`), Sundress (`casual_*`), Swimsuit (`swim2_*`), Seifuku (`uniform_*`), Nightgown (`night_*`) under `assets/sprites/` |
+| Backgrounds  | Mt Fuji, Sakura park, Beach, Onsen, Gym, Bedroom (`assets/bg/`); a CSS “Dream” gradient exists but is commented out in `app.js`  |
 
 Sprites were generated with GPT Image 2 (base image, then image-to-image mouth
 and outfit edits). Switch looks with the top-right chips, or add your own by

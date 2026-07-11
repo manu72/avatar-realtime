@@ -18,6 +18,7 @@ final class GeminiLiveClient {
         case turnComplete
         case userTranscript(String)
         case modelTranscript(String)
+        case toolCall(id: String?, name: String, args: [String: String])
         case goAway
         case closed(Error?)
     }
@@ -77,6 +78,13 @@ final class GeminiLiveClient {
         send(ClientMessage(clientContent: .init(turns: [.user(note)], turnComplete: announce)))
     }
 
+    /// Reply to a Gemini function call — the session waits until every call is answered.
+    func sendToolResponse(id: String?, name: String, response: [String: String]) {
+        send(ClientMessage(toolResponse: .init(
+            functionResponses: [.init(id: id, name: name, response: response)]
+        )))
+    }
+
     private func send(_ message: ClientMessage) {
         guard let task, let data = try? encoder.encode(message) else { return }
         task.send(.string(String(decoding: data, as: UTF8.self))) { [weak self] error in
@@ -107,6 +115,10 @@ final class GeminiLiveClient {
         guard let msg = try? decoder.decode(ServerMessage.self, from: data) else { return }
         if msg.setupComplete != nil { onEvent?(.setupComplete) }
         if msg.goAway != nil { onEvent?(.goAway) }
+        for fc in msg.toolCall?.functionCalls ?? [] {
+            guard let name = fc.name else { continue }
+            onEvent?(.toolCall(id: fc.id, name: name, args: fc.args ?? [:]))
+        }
         guard let sc = msg.serverContent else { return }
         for part in sc.modelTurn?.parts ?? [] {
             if let b64 = part.inlineData?.data, let audio = Data(base64Encoded: b64) {

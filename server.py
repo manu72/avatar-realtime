@@ -55,7 +55,37 @@ Use VERY OCCASIONAL conversational imperfections that show your thought process 
 - Semantic slippage: "that reminds me of when I...", "I think I mentioned that before..."
 - Associative thinking: "you know, I've always wondered...", "have you ever noticed that..."
 - Metacognitive awareness: "I'm not sure if I'm making sense...", "let me try that again..."
+
+You can change your own outfit with the set_outfit tool and move both of you to a new place with the set_background tool.
+Tool rules:
+- When the conversation naturally calls for it (e.g. the user says "let's go to the beach"), OFFER the change in character first: "Should I change into my swimsuit?"
+- Call a tool ONLY after the user clearly agrees in this conversation. Never call one uninvited.
+- If the user agreed to an outfit and a place together in one answer, you may call both tools in the same turn.
+- If they ask for an outfit or place you don't have, say so playfully and offer the closest one you do have.
+- After a change goes through, react with one short cheerful in-character line.
 """
+
+# single source of truth for what Sakura may change herself; must list only
+# outfits/backgrounds the clients actually have (app.js SPRITES/BACKGROUNDS,
+# Wardrobe.swift) — enum-constrained in the tool schema AND re-checked on
+# every call so model output is never trusted
+OUTFITS = ["Seifuku", "Sundress", "Swimsuit", "Gymwear", "Nightgown"]
+LOCATIONS = ["Bedroom", "Sakura", "Beach", "Fuji", "Onsen", "Gym"]
+SCENE_TOOLS = {"set_outfit": ("outfit", OUTFITS), "set_background": ("background", LOCATIONS)}
+
+
+def scene_tool_call(name, args):
+    """Validate a Gemini function call against the wardrobe allow-list.
+
+    Returns (browser_update | None, tool_response_payload). Invalid calls are
+    refused with an error payload so the Live session never hangs waiting.
+    """
+    key, allowed = SCENE_TOOLS.get(name or "", (None, ()))
+    value = (args or {}).get(key) if key else None
+    if value in allowed:
+        return {key: value}, {"result": "ok"}
+    return None, {"error": f"invalid {name} request"}
+
 
 def build_config(system_instruction):
     """Live config; per-connection because the user's memory is appended to the persona."""
@@ -80,6 +110,30 @@ def build_config(system_instruction):
             trigger_tokens=104857,
             sliding_window=types.SlidingWindow(target_tokens=52428),
         ),
+        tools=[
+            types.Tool(
+                function_declarations=[
+                    types.FunctionDeclaration(
+                        name="set_outfit",
+                        description="Change the outfit Sakura is wearing. Call only after the user has clearly agreed to the change.",
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={"outfit": types.Schema(type=types.Type.STRING, enum=OUTFITS)},
+                            required=["outfit"],
+                        ),
+                    ),
+                    types.FunctionDeclaration(
+                        name="set_background",
+                        description="Move the scene to a different location ('Sakura' is a cherry-blossom garden). Call only after the user has clearly agreed to go there.",
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={"background": types.Schema(type=types.Type.STRING, enum=LOCATIONS)},
+                            required=["background"],
+                        ),
+                    ),
+                ]
+            )
+        ],
     )
 
 
@@ -185,6 +239,14 @@ async def ws_handler(request):
                         async for resp in session.receive():
                             if resp.data:  # 24 kHz pcm16 voice chunk
                                 await ws.send_bytes(resp.data)
+                            if resp.tool_call and resp.tool_call.function_calls:
+                                fr = []
+                                for fc in resp.tool_call.function_calls:
+                                    update, result = scene_tool_call(fc.name, fc.args)
+                                    if update:
+                                        await ws.send_json({"type": "set_scene", **update})
+                                    fr.append(types.FunctionResponse(id=fc.id, name=fc.name, response=result))
+                                await session.send_tool_response(function_responses=fr)
                             sc = resp.server_content
                             if sc is None:
                                 continue

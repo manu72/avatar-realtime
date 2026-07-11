@@ -157,6 +157,9 @@ final class SessionViewModel: ObservableObject {
             appendBubble(.her, text)
             turnBuffer.append(role: "sakura", text: text)
 
+        case .toolCall(let id, let name, let args):
+            applySceneTool(id: id, name: name, args: args)
+
         case .goAway:
             setStatus("reconnecting…", .idle)
 
@@ -220,6 +223,30 @@ final class SessionViewModel: ObservableObject {
     func setBackdrop(_ b: Backdrop) {
         backdrop = b
         scheduleScene()
+    }
+
+    /// Sakura changing her own outfit/location via a Gemini function call.
+    /// Args are re-validated against the real wardrobe (never trust model
+    /// output), applied WITHOUT scheduleScene — she initiated it, no echo —
+    /// and always answered, or the Live session stalls waiting.
+    private func applySceneTool(id: String?, name: String, args: [String: String]) {
+        var ok = false
+        switch name {
+        case "set_outfit":
+            if let o = Outfit.all.first(where: { $0.clean == args["outfit"] }) {
+                outfit = o
+                ok = true
+            }
+        case "set_background":
+            if let b = Backdrop.all.first(where: { $0.clean == args["background"] }) {
+                backdrop = b
+                ok = true
+            }
+        default:
+            break
+        }
+        client?.sendToolResponse(id: id, name: name,
+                                 response: ok ? ["result": "ok"] : ["error": "invalid \(name) request"])
     }
 
     /// Debounce rapid chip taps into one announced update (600 ms, like web).
