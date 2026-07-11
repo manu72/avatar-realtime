@@ -5,7 +5,8 @@
       "name": "sakura",
       "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["server.py"],
-      "port": 8787
+      "port": 8787,
+      "autoPort": true
     }
   ]
 }

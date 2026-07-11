@@ -24,7 +24,10 @@ from pathlib import Path
 log = logging.getLogger("sakura.memory")
 
 # ---------------------------------------------------------------- constants
-DB_PATH = Path(environ.get("SAKURA_DB_PATH", Path(__file__).parent / "sakura.db"))
+# data lives outside the repo in production (e.g. a Railway volume at /data);
+# locally it defaults to the repo directory, same as before
+DATA_DIR = Path(environ.get("SAKURA_DATA_DIR", Path(__file__).parent))
+DB_PATH = Path(environ.get("SAKURA_DB_PATH", DATA_DIR / "sakura.db"))
 MEMORY_MODEL = environ.get("SAKURA_MEMORY_MODEL", "gemini-2.5-flash")
 
 MAX_FACTS = int(environ.get("SAKURA_MAX_FACTS", 15))
@@ -79,6 +82,7 @@ SCHEMA_VERSION = 1
 
 def init_db(db_path=DB_PATH):
     """Create tables; safe to call on every startup (lightweight migration hook)."""
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     with _connect(db_path) as con:
         con.executescript(
             """

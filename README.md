@@ -14,7 +14,7 @@ Two independent implementations live in this repository:
 
 Neither depends on the other at runtime; each is runnable on its own.
 
-## Run
+## Run locally
 
 ```bash
 python3 -m venv .venv
@@ -25,6 +25,36 @@ echo 'GEMINI_API_KEY=your-key' > .env   # if not already present
 
 Open http://127.0.0.1:8787, click once to enable audio, then type — or hit the
 mic button and just talk. You can interrupt her mid-sentence by speaking.
+
+## Deploy to Railway
+
+The repo deploys straight from GitHub: [`railway.json`](railway.json) carries the
+start command, health check (`/health`) and restart policy; `.python-version`
+pins Python 3.12; dependencies come from `requirements.txt`. Set
+`GEMINI_API_KEY`, attach a volume at `/data` and set `SAKURA_DATA_DIR=/data`
+so the SQLite memory survives redeploys. Full walkthrough (account setup →
+troubleshooting): [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md).
+
+In production the same single aiohttp process does everything: serves the
+static app and sprites, relays the browser WebSocket to Gemini Live, and runs
+background memory extraction. WebSocket origins are checked (same-origin plus
+`ALLOWED_ORIGINS`), errors return generic 500s, and SIGTERM triggers a graceful
+shutdown that closes WebSockets and flushes pending memory writes. SQLite is
+single-writer — run **one replica**.
+
+### Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GEMINI_API_KEY` | — (required) | Gemini API key for Live voice + memory extraction |
+| `PORT` | `8787` | Listen port (Railway sets this automatically) |
+| `HOST` | `0.0.0.0` | Bind address |
+| `LOG_LEVEL` | `INFO` | Python logging level |
+| `ALLOWED_ORIGINS` | unset | Extra allowed browser origins, comma-separated; same-origin always allowed |
+| `SAKURA_DATA_DIR` | repo dir | Directory for `sakura.db` (created automatically; use `/data` on Railway) |
+| `SAKURA_DB_PATH` | `$SAKURA_DATA_DIR/sakura.db` | Exact DB file path override |
+| `SAKURA_MEMORY_MODEL` | `gemini-2.5-flash` | Text model used for memory extraction |
+| `SAKURA_MAX_FACTS` etc. | see `memory.py` | Memory size caps and update threshold |
 
 ## How it works
 
@@ -52,8 +82,8 @@ the server. There is no separate prompt file or UI for this.
 ## Memory
 
 Sakura keeps a lightweight persistent memory per anonymous visitor (`memory.py`,
-SQLite via stdlib `sqlite3`, stored in `sakura.db` next to `server.py` —
-override with `SAKURA_DB_PATH`).
+SQLite via stdlib `sqlite3`, stored in `sakura.db` next to `server.py` by
+default — point it elsewhere with `SAKURA_DATA_DIR` or `SAKURA_DB_PATH`).
 
 **How it works**
 

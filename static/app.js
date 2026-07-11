@@ -4,10 +4,10 @@ const $ = (s) => document.querySelector(s);
 
 /* ---------- assets ---------- */
 const SPRITES = {
-  "Seifuku 🎀": {
-    closed: "/assets/sprites/uniform_closed.webp",
-    half: "/assets/sprites/uniform_half.webp",
-    open: "/assets/sprites/uniform_open.webp",
+  "Gymwear 🏃‍♀️": {
+    closed: "/assets/sprites/gym_closed.webp",
+    half: "/assets/sprites/gym_half.webp",
+    open: "/assets/sprites/gym_open.webp",
   },
   "Sundress 🌿": {
     closed: "/assets/sprites/casual_closed.webp",
@@ -19,10 +19,10 @@ const SPRITES = {
     half: "/assets/sprites/swim2_half.webp",
     open: "/assets/sprites/swim2_half.webp",
   },
-  "Gymwear 🏃‍♀️": {
-    closed: "/assets/sprites/gym_closed.webp",
-    half: "/assets/sprites/gym_half.webp",
-    open: "/assets/sprites/gym_open.webp",
+  "Seifuku 🎀": {
+    closed: "/assets/sprites/uniform_closed.webp",
+    half: "/assets/sprites/uniform_half.webp",
+    open: "/assets/sprites/uniform_open.webp",
   },
   "Nightgown 🌙": {
     closed: "/assets/sprites/night_closed.webp",
@@ -31,12 +31,12 @@ const SPRITES = {
   },
 };
 const BACKGROUNDS = {
-  "Bedroom 🛏": "url(/assets/bg/bedroom.webp)",
+  "Fuji 🗻": "url(/assets/bg/fuji.webp)",
   "Sakura 🌸": "url(/assets/bg/sakura.webp)",
   "Beach 🏖": "url(/assets/bg/beach.webp)",
-  "Fuji 🗻": "url(/assets/bg/fuji.webp)",
   "Onsen ♨️": "url(/assets/bg/onsen.webp)",
   "Gym 🏋️": "url(/assets/bg/gym.webp)",
+  "Bedroom 🛏": "url(/assets/bg/bedroom.webp)",
   // "Dream ☁️": "linear-gradient(160deg,#ffd9e8 0%,#e8d9ff 50%,#d0f4e0 100%)",
 };
 
@@ -115,7 +115,7 @@ function setStatus(text, cls) {
 
 /* ---------- websocket ---------- */
 function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
     setStatus("ready — talk to me!", "ok");
