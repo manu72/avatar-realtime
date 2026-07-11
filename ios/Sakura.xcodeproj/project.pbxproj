@@ -39,19 +39,11 @@
 			exceptions = (
 				AB0000000000000000000022 /* Exceptions for "Sakura" folder in "Sakura" target */,
 			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = Sakura;
 			sourceTree = "<group>";
 		};
 		AB0000000000000000000021 /* SakuraTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = SakuraTests;
 			sourceTree = "<group>";
 		};
@@ -288,6 +280,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = MQN29AF973;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sakura/SupportingFiles/Info.plist;
@@ -309,6 +302,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = MQN29AF973;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sakura/SupportingFiles/Info.plist;

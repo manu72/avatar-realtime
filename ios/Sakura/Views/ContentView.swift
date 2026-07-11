@@ -8,7 +8,6 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            background
             avatar
             VStack(spacing: 8) {
                 header
@@ -23,7 +22,22 @@ struct ContentView: View {
 
             if !vm.sessionStarted { startOverlay }
         }
+        // The backdrop image lives in .background, NOT as a ZStack child: a
+        // resizable().scaledToFill() image reports its OVERFLOWING size (the
+        // 1344×752 art becomes ~1560pt wide on a 402pt screen), and as a
+        // sibling it inflates the ZStack's bounds, pushing every full-width
+        // child (header, chips, input bar) off the visible screen. A
+        // background layer can never influence layout.
+        .background { background }
         .sheet(isPresented: $showMemory) { MemoryView().environmentObject(vm) }
+        .alert("Audio couldn't start", isPresented: Binding(
+            get: { vm.audioError != nil },
+            set: { if !$0 { vm.audioError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(vm.audioError ?? "")
+        }
         .alert("Gemini API key missing", isPresented: $vm.apiKeyMissing) {
             Button("OK", role: .cancel) {}
         } message: {
