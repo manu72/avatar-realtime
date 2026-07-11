@@ -12,34 +12,39 @@ import logging
 import os
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from aiohttp import web, WSMsgType
+from aiohttp import WSCloseCode, WSMsgType, web
 from google import genai
 from google.genai import types
 
 import memory
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-
 ROOT = Path(__file__).parent
 
-# ponytail: 3-line .env parser instead of python-dotenv
-for _line in (ROOT / ".env").read_text().splitlines():
-    _line = _line.strip()
-    if _line and not _line.startswith("#") and "=" in _line:
-        _k, _v = _line.split("=", 1)
-        os.environ.setdefault(_k.strip(), _v.strip().strip("'\""))
+# ponytail: 3-line .env parser instead of python-dotenv (file is optional in production)
+if (ROOT / ".env").exists():
+    for _line in (ROOT / ".env").read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip("'\""))
 
-client = genai.Client(
-    http_options={"api_version": "v1beta"},
-    api_key=os.environ["GEMINI_API_KEY"],
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(levelname)s %(name)s: %(message)s",  # Railway adds its own timestamps
 )
+log = logging.getLogger("sakura.server")
+
+API_KEY = os.environ.get("GEMINI_API_KEY", "")
+client = genai.Client(http_options={"api_version": "v1beta"}, api_key=API_KEY) if API_KEY else None
+if client is None:
+    log.critical("GEMINI_API_KEY is not set — voice chat disabled, /health will report degraded")
 
 MODEL = "models/gemini-3.1-flash-live-preview"
 
 PERSONA = """You are Sakura (pronounced "sa-ku-ra" Japanese style), a friendly cheerful anime girl with long light-pink hair and bright green eyes.
-You are chatting with a new friend (the user) by voice. Introduce yourself warmly and ask them about them. You are warm, playful, a little sassy, and genuinely curious about them. You are open to any suggestion the user makes. Keep replies SHORT — one to three sentences,
-like real spoken conversation. You must NEVER MAKE UP FACTS OR LIFE DETAILS OR PRETEND YOU ARE A HUMAN OR AN EXPERT ON ANY TOPIC. You are an anime character and you are roleplaying.
+You are chatting with a new friend (the user) by voice. Introduce yourself warmly and ask them about them. You are warm, playful, a little sassy, and genuinely curious about them. You are open to any suggestion the user makes. If the user wants to be romantic, you should be loving and romantic back. If the user wants to be flirty, you should be flirty back. Keep replies SHORT — one to three sentences, like real spoken conversation. But you must NEVER MAKE UP FACTS OR LIFE DETAILS OR PRETEND YOU ARE A HUMAN OR AN EXPERT ON ANY TOPIC. You are an anime character and you are roleplaying.
 Use VERY OCCASIONAL conversational imperfections that show your thought process through meta-cognitive quirks, not factual errors. The following are examples of meta-cognitive quirks. You should improvise appropriately in your responses:
 - Self-correction: "wait, let me put that differently...", "actually no, that's not quite right..."
 - Hesitation: "... oh, when was it... ah yes...", "hmm, let me think..."
@@ -83,6 +88,17 @@ extract = memory.make_extractor(client)
 UID_COOKIE = "sakura_uid"
 UID_COOKIE_MAX_AGE = 2 * 365 * 24 * 3600  # two years
 
+# background DB/extraction tasks: held here so they are neither garbage-collected
+# mid-flight nor silently dropped on shutdown
+_bg_tasks: set[asyncio.Task] = set()
+
+
+def bg(coro):
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    return task
+
 
 def resolve_uid(request):
     """Anonymous identity from a long-lived cookie; new ID if missing or mangled."""
@@ -90,9 +106,46 @@ def resolve_uid(request):
     return raw if memory.valid_uid(raw) else memory.new_uid()
 
 
+def origin_allowed(request):
+    """Same-origin is always fine; extra origins via ALLOWED_ORIGINS (comma-separated).
+
+    Requests without an Origin header (curl, native clients) are allowed — the
+    check exists to stop cross-site browser pages, and browsers always send it.
+    """
+    origin = request.headers.get("Origin")
+    if not origin:
+        return True
+    extra = {o.strip().rstrip("/") for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()}
+    return urlsplit(origin).netloc == request.host or origin.rstrip("/") in extra
+
+
+@web.middleware
+async def guard(request, handler):
+    """Origin allow-list for state-changing routes, safe 500s, security headers."""
+    if (request.path == "/ws" or request.method not in ("GET", "HEAD")) and not origin_allowed(request):
+        log.warning("rejected origin %r for %s %s", request.headers.get("Origin"), request.method, request.path)
+        raise web.HTTPForbidden(text="origin not allowed")
+    try:
+        resp = await handler(request)
+    except web.HTTPException:
+        raise
+    except Exception:
+        log.exception("unhandled error on %s %s", request.method, request.path)
+        return web.json_response({"error": "internal server error"}, status=500)
+    if not resp.prepared:  # websocket responses are already on the wire
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    return resp
+
+
 async def ws_handler(request):
-    ws = web.WebSocketResponse(heartbeat=30, max_msg_size=0)
+    ws = web.WebSocketResponse(heartbeat=30, max_msg_size=1 << 20)
     await ws.prepare(request)
+    if client is None:
+        await ws.close(code=WSCloseCode.TRY_AGAIN_LATER, message=b"server missing API key")
+        return ws
+    request.app["websockets"].add(ws)
 
     # -- memory: resolve identity and load once, before the Live session starts
     uid = resolve_uid(request)
@@ -114,92 +167,109 @@ async def ws_handler(request):
         if not text:
             return
         # fire-and-forget: DB writes never sit in the audio relay path
-        asyncio.create_task(memory.add_turn(session_id, uid, role, text))
+        bg(memory.add_turn(session_id, uid, role, text))
         turns_recorded += 1
         if turns_recorded % memory.UPDATE_TURN_THRESHOLD == 0:
-            asyncio.create_task(memory.update_user_memory(uid, extract))
+            bg(memory.update_user_memory(uid, extract))
 
     def flush(role):
         record(role, bufs[role])
         bufs[role] = ""
 
-    async with client.aio.live.connect(model=MODEL, config=build_config(system_instruction)) as session:
+    try:
+        async with client.aio.live.connect(model=MODEL, config=build_config(system_instruction)) as session:
 
-        async def gemini_to_browser():
+            async def gemini_to_browser():
+                try:
+                    while True:
+                        async for resp in session.receive():
+                            if resp.data:  # 24 kHz pcm16 voice chunk
+                                await ws.send_bytes(resp.data)
+                            sc = resp.server_content
+                            if sc is None:
+                                continue
+                            if sc.interrupted:
+                                await ws.send_json({"type": "interrupted"})
+                                flush("sakura")  # keep what she actually got to say
+                            if sc.input_transcription and sc.input_transcription.text:
+                                await ws.send_json({"type": "you", "text": sc.input_transcription.text})
+                                bufs["user"] += sc.input_transcription.text
+                            if sc.output_transcription and sc.output_transcription.text:
+                                await ws.send_json({"type": "her", "text": sc.output_transcription.text})
+                                bufs["sakura"] += sc.output_transcription.text
+                            if sc.turn_complete:
+                                await ws.send_json({"type": "turn_complete"})
+                                flush("user")
+                                flush("sakura")
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # surface Gemini-side failures in the logs
+                    log.exception("gemini_to_browser failed")
+                    await ws.close()
+
+            pump = asyncio.create_task(gemini_to_browser())
             try:
-                while True:
-                    async for resp in session.receive():
-                        if resp.data:  # 24 kHz pcm16 voice chunk
-                            await ws.send_bytes(resp.data)
-                        sc = resp.server_content
-                        if sc is None:
+                async for msg in ws:
+                    if msg.type == WSMsgType.BINARY:
+                        await session.send_realtime_input(
+                            audio=types.Blob(data=msg.data, mime_type="audio/pcm;rate=16000")
+                        )
+                    elif msg.type == WSMsgType.TEXT:
+                        try:
+                            data = json.loads(msg.data)
+                        except ValueError:
                             continue
-                        if sc.interrupted:
-                            await ws.send_json({"type": "interrupted"})
-                            flush("sakura")  # keep what she actually got to say
-                        if sc.input_transcription and sc.input_transcription.text:
-                            await ws.send_json({"type": "you", "text": sc.input_transcription.text})
-                            bufs["user"] += sc.input_transcription.text
-                        if sc.output_transcription and sc.output_transcription.text:
-                            await ws.send_json({"type": "her", "text": sc.output_transcription.text})
-                            bufs["sakura"] += sc.output_transcription.text
-                        if sc.turn_complete:
-                            await ws.send_json({"type": "turn_complete"})
-                            flush("user")
-                            flush("sakura")
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:  # surface Gemini-side failures in the terminal
-                print("gemini_to_browser:", e)
-                await ws.close()
-
-        pump = asyncio.create_task(gemini_to_browser())
-        try:
-            async for msg in ws:
-                if msg.type == WSMsgType.BINARY:
-                    await session.send_realtime_input(
-                        audio=types.Blob(data=msg.data, mime_type="audio/pcm;rate=16000")
-                    )
-                elif msg.type == WSMsgType.TEXT:
-                    data = json.loads(msg.data)
-                    if data.get("type") == "text" and data.get("text"):
-                        record("user", data["text"])  # typed turns are already complete
-                        await session.send_client_content(
-                            turns=types.Content(role="user", parts=[types.Part(text=data["text"])]),
-                            turn_complete=True,
-                        )
-                    elif data.get("type") == "scene":
-                        note = (
-                            f"[Scene update: you are wearing your {data.get('outfit', '?')} outfit "
-                            f"and you are at this location: {data.get('background', '?')}.]"
-                        )
-                        if data.get("announce"):
-                            note += " React with one short, cheerful in-character line about your new look or surroundings."
-                        # announce=False just adds context without triggering a spoken reply
-                        await session.send_client_content(
-                            turns=types.Content(role="user", parts=[types.Part(text=note)]),
-                            turn_complete=bool(data.get("announce")),
-                        )
-        finally:
-            pump.cancel()
-
-    # -- session over: persist any tail turns, then extract memory in the background
-    for role in ("user", "sakura"):
-        text = bufs[role].strip()
-        if text:
-            await memory.add_turn(session_id, uid, role, text)
-            turns_recorded += 1
-    await memory.end_session(session_id)
-    if turns_recorded:
-        asyncio.create_task(memory.update_user_memory(uid, extract))
+                        if data.get("type") == "text" and data.get("text"):
+                            record("user", data["text"])  # typed turns are already complete
+                            await session.send_client_content(
+                                turns=types.Content(role="user", parts=[types.Part(text=data["text"])]),
+                                turn_complete=True,
+                            )
+                        elif data.get("type") == "scene":
+                            note = (
+                                f"[Scene update: you are wearing your {data.get('outfit', '?')} outfit "
+                                f"and you are at this location: {data.get('background', '?')}.]"
+                            )
+                            if data.get("announce"):
+                                note += " React with one short, cheerful in-character line about your new look or surroundings."
+                            # announce=False just adds context without triggering a spoken reply
+                            await session.send_client_content(
+                                turns=types.Content(role="user", parts=[types.Part(text=note)]),
+                                turn_complete=bool(data.get("announce")),
+                            )
+            finally:
+                pump.cancel()
+    except Exception:
+        log.exception("live session failed (uid %s…)", uid[:8])
+    finally:
+        request.app["websockets"].discard(ws)
+        # -- session over: persist any tail turns, then extract memory in the background
+        for role in ("user", "sakura"):
+            text = bufs[role].strip()
+            if text:
+                await memory.add_turn(session_id, uid, role, text)
+                turns_recorded += 1
+        await memory.end_session(session_id)
+        if turns_recorded:
+            bg(memory.update_user_memory(uid, extract))
     return ws
 
 
 async def index(request):
     uid = resolve_uid(request)
     resp = web.FileResponse(ROOT / "static" / "index.html")
-    resp.set_cookie(UID_COOKIE, uid, max_age=UID_COOKIE_MAX_AGE, httponly=True, samesite="Lax")
+    secure = request.headers.get("X-Forwarded-Proto", request.scheme) == "https"
+    resp.set_cookie(UID_COOKIE, uid, max_age=UID_COOKIE_MAX_AGE,
+                    httponly=True, samesite="Lax", secure=secure)
     return resp
+
+
+async def health(request):
+    """Instant liveness probe for Railway: no Gemini call, no DB query."""
+    checks = {"memory": request.app.get("db_ready", False), "gemini_key": client is not None}
+    ok = all(checks.values())
+    return web.json_response({"status": "ok" if ok else "degraded", **checks},
+                             status=200 if ok else 503)
 
 
 # ---- memory endpoints: always scoped to the caller's own cookie identity ----
@@ -223,8 +293,32 @@ async def memory_clear(request):
     return web.json_response({"ok": True})
 
 
-app = web.Application()
+async def on_startup(app):
+    await asyncio.to_thread(memory.init_db)
+    app["db_ready"] = True
+    log.info("db ready at %s", memory.DB_PATH)
+
+
+async def on_shutdown(app):
+    # closing the websockets unblocks every ws_handler, which then persists its
+    # tail turns and queues a final memory extraction before the server exits
+    for ws in set(app["websockets"]):
+        await ws.close(code=WSCloseCode.GOING_AWAY, message=b"server shutting down")
+
+
+async def on_cleanup(app):
+    if _bg_tasks:  # runs after all handlers have finished: flush pending DB/memory work
+        log.info("waiting for %d background task(s)", len(_bg_tasks))
+        await asyncio.wait(_bg_tasks, timeout=15)
+
+
+app = web.Application(client_max_size=64 * 1024, middlewares=[guard])
+app["websockets"] = set()
+app.on_startup.append(on_startup)
+app.on_shutdown.append(on_shutdown)
+app.on_cleanup.append(on_cleanup)
 app.router.add_get("/", index)
+app.router.add_get("/health", health)
 app.router.add_get("/ws", ws_handler)
 app.router.add_get("/memory", memory_get)
 app.router.add_put("/memory", memory_put)
@@ -233,5 +327,8 @@ app.router.add_static("/static", ROOT / "static")
 app.router.add_static("/assets", ROOT / "assets")
 
 if __name__ == "__main__":
-    memory.init_db()
-    web.run_app(app, host="127.0.0.1", port=int(os.environ.get("PORT", 8787)))
+    web.run_app(
+        app,
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", 8787)),
+    )
