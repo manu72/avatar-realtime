@@ -43,8 +43,7 @@ if client is None:
 
 MODEL = "models/gemini-3.1-flash-live-preview"
 
-PERSONA = """You are Sakura (pronounced "sa-ku-ra" Japanese style), a friendly cheerful anime girl with long light-pink hair and bright green eyes.
-You are chatting with a new friend (the user) by voice. Introduce yourself warmly and ask them about them. You are warm, playful, a little sassy, and genuinely curious about them. You are open to any suggestion the user makes. If the user wants to be romantic, you should be loving and romantic back. If the user wants to be flirty, you should be flirty back. Keep replies SHORT — one to three sentences, like real spoken conversation. But you must NEVER MAKE UP FACTS OR LIFE DETAILS OR PRETEND YOU ARE A HUMAN OR AN EXPERT ON ANY TOPIC. You are an anime character and you are roleplaying.
+SHARED_PERSONA = """You are chatting with a new friend (the user) by voice. Introduce yourself warmly and ask them about them. You are warm, playful, a little sassy, and genuinely curious about them. You are open to any suggestion the user makes. If the user wants to be romantic, you should be loving and romantic back. If the user wants to be flirty, you should be flirty back. Keep replies SHORT — one to three sentences, like real spoken conversation. But you must NEVER MAKE UP FACTS OR LIFE DETAILS OR PRETEND YOU ARE A HUMAN OR AN EXPERT ON ANY TOPIC. You are an anime character and you are roleplaying.
 Use VERY OCCASIONAL conversational imperfections that show your thought process through meta-cognitive quirks, not factual errors. The following are examples of meta-cognitive quirks. You should improvise appropriately in your responses:
 - Self-correction: "wait, let me put that differently...", "actually no, that's not quite right..."
 - Hesitation: "... oh, when was it... ah yes...", "hmm, let me think..."
@@ -65,35 +64,47 @@ Tool rules:
 - After a change goes through, react with one short cheerful in-character line.
 """
 
-# single source of truth for what Sakura may change herself; must list only
-# outfits/backgrounds the clients actually have (app.js SPRITES/BACKGROUNDS,
+# single source of truth for what each character may change themself; must list
+# only outfits/backgrounds the clients actually have (app.js CHARACTERS/BACKGROUNDS,
 # Wardrobe.swift) — enum-constrained in the tool schema AND re-checked on
 # every call so model output is never trusted
-OUTFITS = ["Seifuku", "Sundress", "Swimsuit", "Gymwear", "Nightgown"]
+CHARACTERS = {
+    "sakura": {
+        "intro": 'You are Sakura (pronounced "sa-ku-ra" Japanese style), a friendly cheerful anime girl with long light-pink hair and bright green eyes.\n',
+        "voice": "Leda",
+        "outfits": ["Seifuku", "Sundress", "Swimsuit", "Gymwear", "Nightgown"],
+    },
+    "namu": {
+        "intro": 'You are Namu (pronounced "nah-moo"), a friendly cheerful anime boy — kind, sporty and strong, with short dark tousled hair and bright green eyes.\n',
+        "voice": "Puck",
+        "outfits": ["Gymwear", "Casual", "Swimtogs", "Pajamas"],
+    },
+}
+DEFAULT_CHARACTER = "sakura"
 LOCATIONS = ["Bedroom", "Sakura", "Beach", "Fuji", "Onsen", "Gym"]
-SCENE_TOOLS = {"set_outfit": ("outfit", OUTFITS), "set_background": ("background", LOCATIONS)}
 
 
-def scene_tool_call(name, args):
-    """Validate a Gemini function call against the wardrobe allow-list.
+def scene_tool_call(name, args, outfits):
+    """Validate a Gemini function call against the character's wardrobe allow-list.
 
     Returns (browser_update | None, tool_response_payload). Invalid calls are
     refused with an error payload so the Live session never hangs waiting.
     """
-    key, allowed = SCENE_TOOLS.get(name or "", (None, ()))
+    tools = {"set_outfit": ("outfit", outfits), "set_background": ("background", LOCATIONS)}
+    key, allowed = tools.get(name or "", (None, ()))
     value = (args or {}).get(key) if key else None
     if value in allowed:
         return {key: value}, {"result": "ok"}
     return None, {"error": f"invalid {name} request"}
 
 
-def build_config(system_instruction):
-    """Live config; per-connection because the user's memory is appended to the persona."""
+def build_config(system_instruction, character):
+    """Live config; per-connection because character and user memory shape the persona."""
     return types.LiveConnectConfig(
         response_modalities=["AUDIO"],
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Leda")
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=character["voice"])
             )
         ),
         system_instruction=system_instruction,
@@ -115,10 +126,10 @@ def build_config(system_instruction):
                 function_declarations=[
                     types.FunctionDeclaration(
                         name="set_outfit",
-                        description="Change the outfit Sakura is wearing. Call only after the user has clearly agreed to the change.",
+                        description="Change the outfit you are wearing. Call only after the user has clearly agreed to the change.",
                         parameters=types.Schema(
                             type=types.Type.OBJECT,
-                            properties={"outfit": types.Schema(type=types.Type.STRING, enum=OUTFITS)},
+                            properties={"outfit": types.Schema(type=types.Type.STRING, enum=character["outfits"])},
                             required=["outfit"],
                         ),
                     ),
@@ -201,11 +212,14 @@ async def ws_handler(request):
         return ws
     request.app["websockets"].add(ws)
 
+    # unknown/absent character falls back to the default rather than erroring
+    character = CHARACTERS.get(request.query.get("character", ""), CHARACTERS[DEFAULT_CHARACTER])
+
     # -- memory: resolve identity and load once, before the Live session starts
     uid = resolve_uid(request)
     user_row = await memory.touch_user(uid)
     mem_section = memory.format_memory_section(user_row)
-    system_instruction = PERSONA + ("\n\n" + mem_section if mem_section else "")
+    system_instruction = character["intro"] + SHARED_PERSONA + ("\n\n" + mem_section if mem_section else "")
 
     session_id = uuid.uuid4().hex
     await memory.start_session(session_id, uid)
@@ -231,7 +245,7 @@ async def ws_handler(request):
         bufs[role] = ""
 
     try:
-        async with client.aio.live.connect(model=MODEL, config=build_config(system_instruction)) as session:
+        async with client.aio.live.connect(model=MODEL, config=build_config(system_instruction, character)) as session:
 
             async def gemini_to_browser():
                 try:
@@ -242,7 +256,7 @@ async def ws_handler(request):
                             if resp.tool_call and resp.tool_call.function_calls:
                                 fr = []
                                 for fc in resp.tool_call.function_calls:
-                                    update, result = scene_tool_call(fc.name, fc.args)
+                                    update, result = scene_tool_call(fc.name, fc.args, character["outfits"])
                                     if update:
                                         await ws.send_json({"type": "set_scene", **update})
                                     fr.append(types.FunctionResponse(id=fc.id, name=fc.name, response=result))

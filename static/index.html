@@ -164,7 +164,7 @@
     border-bottom-left-radius: 6px;
   }
   .bub.her::before {
-    content: "Sakura ✿"; display: block; font-size: 10.5px; font-weight: 700;
+    content: var(--char-label, "Sakura ✿"); display: block; font-size: 10.5px; font-weight: 700;
     color: var(--pink-deep); font-family: "Mochiy Pop One", sans-serif;
   }
   .bub.you {
@@ -264,13 +264,29 @@
     50%      { transform: scale(1.03); }
   }
   #boot small { display: block; margin-top: 8px; font-family: "Zen Maru Gothic"; font-size: 13px; color: var(--ink); }
+
+  /* ---------- character select cards ---------- */
+  #boot-chars { display: flex; gap: 16px; justify-content: center; margin-top: 16px; }
+  #boot-chars button {
+    border: 2px solid #fff; cursor: pointer; border-radius: 20px;
+    font-family: "Mochiy Pop One", sans-serif; font-size: 15px; color: var(--pink-deep);
+    padding: 12px 18px 10px; background: rgba(255,255,255,.75);
+    box-shadow: var(--shadow); transition: transform .12s, box-shadow .12s;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  #boot-chars button:hover { transform: translateY(-3px) scale(1.03); }
+  #boot-chars button img {
+    width: 96px; aspect-ratio: 688 / 1024; object-fit: cover; object-position: top;
+    border-radius: 14px; background: linear-gradient(160deg, #ffd9e8, #d0f4e0);
+  }
+  #boot-chars button:last-child { color: #2e7d5b; }
 </style>
 </head>
 <body>
   <div id="stage"></div>
 
   <div id="avatar">
-    <img id="m-closed" alt="Sakura">
+    <img id="m-closed" alt="avatar">
     <img id="m-half" alt="">
     <img id="m-open" alt="">
   </div>
@@ -283,7 +299,7 @@
 
   <div id="mem-modal" hidden>
     <div id="mem-card">
-      <h2>🧠 Sakura's memory of you</h2>
+      <h2 id="mem-title">🧠 Sakura's memory of you</h2>
       <div id="mem-view">loading…</div>
       <details>
         <summary>Edit raw memory (JSON)</summary>
@@ -294,9 +310,9 @@
         <button id="mem-clear" type="button">Forget everything</button>
         <button id="mem-close" type="button">Close</button>
       </div>
-      <small>Sakura keeps short text notes about you and your recent text transcripts
-      in a plain SQLite database on this server. They are not encrypted. No audio is
-      stored. Changes apply from your next session (reload the page).</small>
+      <small>Your companion keeps short text notes about you and your recent text
+      transcripts in a plain SQLite database on this server. They are not encrypted.
+      No audio is stored. Changes apply from your next session (reload the page).</small>
     </div>
   </div>
 
@@ -313,8 +329,24 @@
     <button id="mic" type="button" title="Toggle voice chat">🎤</button>
   </form>
 
-  <!-- inline onclick so the overlay can never trap clicks if app.js fails to load -->
-  <div id="boot" onclick="this.remove(); window.bootApp && window.bootApp()"><div>✿ Sakura Chat ✿<small>click anywhere to start</small></div></div>
+  <!-- inline onclick so the overlay can never trap clicks if app.js fails to load;
+       clicking outside the cards starts with Sakura, the default -->
+  <div id="boot" onclick="this.remove(); window.bootApp && window.bootApp('sakura')">
+    <div>
+      ✿ Avatar Chat ✦
+      <small>who do you want to chat with?</small>
+      <div id="boot-chars">
+        <button type="button"
+          onclick="event.stopPropagation(); document.getElementById('boot').remove(); window.bootApp && window.bootApp('sakura')">
+          <img src="/assets/sprites/uniform_closed.webp" alt="">Sakura ✿
+        </button>
+        <button type="button"
+          onclick="event.stopPropagation(); document.getElementById('boot').remove(); window.bootApp && window.bootApp('namu')">
+          <img src="/assets/sprites/namu_casual_closed.webp" alt="">Namu ✦
+        </button>
+      </div>
+    </div>
+  </div>
 
   <script>
     if (location.protocol === "file:")
