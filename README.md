@@ -4,6 +4,16 @@ A tiny roleplaying web app: talk to Sakura — a pink-haired, green-eyed anime w
 by voice or text. Sakura is an adult anime character who answers in real time with her own voice (Gemini Live API),
 and her sprite lip-syncs to the audio.
 
+Two independent implementations live in this repository:
+
+- **Web app** (this directory) — Python `server.py` relay + browser client,
+  run as documented below.
+- **Native iOS app** (`ios/`) — self-contained Swift/SwiftUI port that talks
+  directly to Gemini Live; it does not use `server.py` at all. Setup and docs:
+  [`ios/README.md`](ios/README.md).
+
+Neither depends on the other at runtime; each is runnable on its own.
+
 ## Run
 
 ```bash

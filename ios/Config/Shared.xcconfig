@@ -1,0 +1,4 @@
+// Committed base config. Pulls in the developer's local, gitignored secrets
+// if present; builds still configure (with an empty key) when it is missing,
+// and the app shows a "key missing" screen instead of failing to compile.
+#include? "Secrets.xcconfig"

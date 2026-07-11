@@ -1,0 +1,14 @@
+# Real secrets — never commit. Copy Config/Secrets.example.xcconfig to Config/Secrets.xcconfig.
+Config/Secrets.xcconfig
+
+# Xcode user state and build output
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS noise
+.DS_Store
