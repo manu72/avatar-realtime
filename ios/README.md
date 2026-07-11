@@ -29,7 +29,7 @@ ios/Sakura/
 
 The web app's `server.py` + `app.js` are the behavioural reference: same
 model (`gemini-3.1-flash-live-preview`), same characters and voices (Sakura:
-Leda, Namu: Puck), same persona text, same VAD/barge-in tuning, same memory
+Leda, Namu: Enceladus), same persona text, same VAD/barge-in tuning, same memory
 document shape and extraction prompt.
 
 ## How Gemini Live is connected
@@ -84,7 +84,7 @@ backend instead.
 
 1. `open ios/Sakura.xcodeproj`
 2. Xcode ▸ Settings ▸ Accounts: sign in, then select your team under
-   *Sakura target ▸ Signing & Capabilities* (or set `DEVELOPMENT_TEAM` in
+   _Sakura target ▸ Signing & Capabilities_ (or set `DEVELOPMENT_TEAM` in
    `Secrets.xcconfig`). If the bundle ID collides, change
    `PRODUCT_BUNDLE_IDENTIFIER`.
 3. Create `Config/Secrets.xcconfig` as above with your Gemini key.

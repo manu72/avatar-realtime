@@ -28,7 +28,7 @@ struct Character: Identifiable, Hashable {
             outfits: Outfit.sakura
         ),
         Character(
-            id: "namu", name: "Namu", sigil: "✦", voiceName: "Puck",
+            id: "namu", name: "Namu", sigil: "✦", voiceName: "Enceladus",
             intro: """
             You are Namu (pronounced "nah-moo"), a friendly cheerful anime boy — kind, sporty and strong, with short dark tousled hair and bright green eyes.
             """,

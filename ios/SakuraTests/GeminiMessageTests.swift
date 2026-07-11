@@ -122,12 +122,12 @@ final class GeminiMessageTests: XCTestCase {
         let sakura = Character.all[0], namu = Character.all[1]
         XCTAssertEqual(sakura.id, "sakura", "Sakura must stay the default (first) character")
         XCTAssertEqual(sakura.voiceName, "Leda")
-        XCTAssertEqual(namu.voiceName, "Puck")
+        XCTAssertEqual(namu.voiceName, "Enceladus")
         XCTAssertFalse(namu.outfits.map(\.clean).contains("Seifuku"))
         XCTAssertFalse(sakura.outfits.map(\.clean).contains("Pajamas"))
         let voice = ClientMessage.Setup.make(for: namu, systemInstruction: "x")
             .generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName
-        XCTAssertEqual(voice, "Puck")
+        XCTAssertEqual(voice, "Enceladus")
     }
 
     func testToolResponseEncoding() throws {

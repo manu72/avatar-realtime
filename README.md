@@ -47,24 +47,24 @@ single-writer — run **one replica**.
 
 ### Environment variables
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `GEMINI_API_KEY` | — (required) | Gemini API key for Live voice + memory extraction |
-| `PORT` | `8787` | Listen port (Railway sets this automatically) |
-| `HOST` | `0.0.0.0` | Bind address |
-| `LOG_LEVEL` | `INFO` | Python logging level |
-| `ALLOWED_ORIGINS` | unset | Extra allowed browser origins, comma-separated; same-origin always allowed |
-| `SAKURA_DATA_DIR` | repo dir | Directory for `sakura.db` (created automatically; use `/data` on Railway) |
-| `SAKURA_DB_PATH` | `$SAKURA_DATA_DIR/sakura.db` | Exact DB file path override |
-| `SAKURA_MEMORY_MODEL` | `gemini-2.5-flash` | Text model used for memory extraction |
-| `SAKURA_MAX_FACTS` etc. | see `memory.py` | Memory size caps and update threshold |
+| Variable                | Default                      | Purpose                                                                    |
+| ----------------------- | ---------------------------- | -------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`        | — (required)                 | Gemini API key for Live voice + memory extraction                          |
+| `PORT`                  | `8787`                       | Listen port (Railway sets this automatically)                              |
+| `HOST`                  | `0.0.0.0`                    | Bind address                                                               |
+| `LOG_LEVEL`             | `INFO`                       | Python logging level                                                       |
+| `ALLOWED_ORIGINS`       | unset                        | Extra allowed browser origins, comma-separated; same-origin always allowed |
+| `SAKURA_DATA_DIR`       | repo dir                     | Directory for `sakura.db` (created automatically; use `/data` on Railway)  |
+| `SAKURA_DB_PATH`        | `$SAKURA_DATA_DIR/sakura.db` | Exact DB file path override                                                |
+| `SAKURA_MEMORY_MODEL`   | `gemini-2.5-flash`           | Text model used for memory extraction                                      |
+| `SAKURA_MAX_FACTS` etc. | see `memory.py`              | Memory size caps and update threshold                                      |
 
 ## How it works
 
 - **`server.py`** — aiohttp server that serves the static app and relays a
   WebSocket between the browser and `gemini-3.1-flash-live-preview`. The
   `?character=` query param on `/ws` selects the persona, prebuilt voice
-  (Sakura: Leda, Namu: Puck) and outfit allow-list from the `CHARACTERS` dict.
+  (Sakura: Leda, Namu: Enceladus) and outfit allow-list from the `CHARACTERS` dict.
   Binary frames are raw PCM audio (16 kHz up, 24 kHz down); JSON frames carry
   transcripts / turn events. The characters can also change their own outfit
   and the background via Gemini function calling (`set_outfit` /
@@ -162,7 +162,7 @@ API access needed).
 ## Voice model
 
 - **Model:** `models/gemini-3.1-flash-live-preview` (`MODEL` in `server.py`)
-- **Voices:** Gemini prebuilt voices — Sakura: `Leda`, Namu: `Puck`
+- **Voices:** Gemini prebuilt voices — Sakura: `Leda`, Namu: `Enceladus`
 - **Audio:** browser mic up at 16 kHz PCM; character voice down at 24 kHz PCM
 
 Change a voice by editing that character's `voice` in the `CHARACTERS` dict in
@@ -174,10 +174,10 @@ Both characters are rendered as layered WEBP sprites with transparent
 backgrounds so they composite over any scene. Mouth states `closed` / `half` /
 `open` are lip-synced from playback RMS every ~40 ms.
 
-| Aspect      | Sakura                                                                                                                              | Namu                                                                                                      |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Look        | Long light-pink hair, bright green eyes                                                                                             | Short dark tousled hair, bright green eyes, muscular                                                        |
-| Outfits     | Gymwear (`gym_*`), Sundress (`casual_*`), Swimsuit (`swim2_*`), Seifuku (`uniform_*`), Nightgown (`night_*`) under `assets/sprites/` | Gymwear (`namu_gym_*`), Casual (`namu_casual_*`), Swimtogs (`namu_swim_*`), Pajamas (`namu_pajama_*`)       |
+| Aspect  | Sakura                                                                                                                               | Namu                                                                                                  |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Look    | Long light-pink hair, bright green eyes                                                                                              | Short dark tousled hair, bright green eyes, muscular                                                  |
+| Outfits | Gymwear (`gym_*`), Sundress (`casual_*`), Swimsuit (`swim2_*`), Seifuku (`uniform_*`), Nightgown (`night_*`) under `assets/sprites/` | Gymwear (`namu_gym_*`), Casual (`namu_casual_*`), Swimtogs (`namu_swim_*`), Pajamas (`namu_pajama_*`) |
 
 Backgrounds are shared: Mt Fuji, Sakura park, Beach, Onsen, Gym, Bedroom
 (`assets/bg/`); a CSS “Dream” gradient exists but is commented out in `app.js`.

@@ -76,7 +76,7 @@ CHARACTERS = {
     },
     "namu": {
         "intro": 'You are Namu (pronounced "nah-moo"), a friendly cheerful anime boy — kind, sporty and strong, with short dark tousled hair and bright green eyes.\n',
-        "voice": "Puck",
+        "voice": "Enceladus",
         "outfits": ["Gymwear", "Casual", "Swimtogs", "Pajamas"],
     },
 }
