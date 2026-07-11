@@ -19,7 +19,7 @@ const SPRITES = {
     half: "/assets/sprites/swim2_half.webp",
     open: "/assets/sprites/swim2_half.webp",
   },
-  "Gym 🏃‍♀️": {
+  "Gymwear 🏃‍♀️": {
     closed: "/assets/sprites/gym_closed.webp",
     half: "/assets/sprites/gym_half.webp",
     open: "/assets/sprites/gym_open.webp",

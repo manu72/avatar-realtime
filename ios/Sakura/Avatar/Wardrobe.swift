@@ -21,7 +21,7 @@ struct Outfit: Identifiable, Hashable {
                sprites: [.closed: "casual_closed", .half: "casual_half", .open: "casual_open"]),
         Outfit(name: "Swimsuit 🩱", clean: "Swimsuit",
                sprites: [.closed: "swim2_closed", .half: "swim2_half", .open: "swim2_half"]),
-        Outfit(name: "Gym 🏃‍♀️", clean: "Gym",
+        Outfit(name: "Gymwear 🏃‍♀️", clean: "Gymwear",
                sprites: [.closed: "gym_closed", .half: "gym_half", .open: "gym_open"]),
         Outfit(name: "Nightgown 🌙", clean: "Nightgown",
                sprites: [.closed: "night_closed", .half: "night_half", .open: "night_open"]),
