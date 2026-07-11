@@ -131,6 +131,16 @@
     }
     .picker::-webkit-scrollbar { display: none; }
     .picker button { flex: 0 0 auto; }
+    /* clamp the sprite to the screen: at 88vh tall she is wider than a portrait
+       phone, and the overflow makes iOS Safari widen the layout viewport, pushing
+       the mic button past the screen edge (59.13vh = 88vh at the 688/1024 ratio) */
+    #avatar { height: auto; width: min(100vw, 59.13vh); }
+    /* compact input bar */
+    #bar { bottom: 16px; gap: 8px; padding: 8px 8px 8px 16px; width: calc(100vw - 24px); }
+    #msg { font-size: 16px; min-width: 0; } /* <16px makes iOS zoom in on focus */
+    #send { width: 38px; height: 38px; font-size: 16px; }
+    #mic { width: 46px; height: 46px; font-size: 20px; }
+    #log { left: 12px; right: 12px; width: auto; bottom: 88px; max-height: 34vh; }
   }
 
   /* ---------- chat log ---------- */
@@ -245,7 +255,13 @@
     font-size: 22px; color: var(--pink-deep);
     padding: 26px 40px; border-radius: 30px;
     background: var(--glass); border: 2px solid #fff; box-shadow: var(--shadow);
-    animation: breathe 2.5s ease-in-out infinite;
+    /* not the avatar's `breathe`: its keyframes carry translateX(-50%), which
+       drags this centered card half off-screen */
+    animation: boot-breathe 2.5s ease-in-out infinite;
+  }
+  @keyframes boot-breathe {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.03); }
   }
   #boot small { display: block; margin-top: 8px; font-family: "Zen Maru Gothic"; font-size: 13px; color: var(--ink); }
 </style>
