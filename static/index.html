@@ -105,7 +105,10 @@
   .picker {
     display: flex; gap: 6px; padding: 6px;
     background: var(--glass); border: 1.5px solid var(--glass-line);
-    border-radius: 999px; backdrop-filter: blur(8px); box-shadow: var(--shadow);
+    border-radius: 22px; backdrop-filter: blur(8px); box-shadow: var(--shadow);
+    /* wrap into extra rows rather than colliding with the header */
+    flex-wrap: wrap; justify-content: flex-end;
+    max-width: calc(100vw - 400px);
   }
   .picker button {
     border: 0; cursor: pointer; font-family: inherit; font-weight: 700;
@@ -115,6 +118,20 @@
   }
   .picker button:hover { transform: translateY(-1px); background: rgba(255,255,255,.7); }
   .picker button.on { background: var(--pink); color: #fff; box-shadow: 0 3px 8px rgba(240,98,146,.4); }
+
+  /* ---------- small screens: pickers become full-width swipeable rows ---------- */
+  @media (max-width: 820px) {
+    header { top: 12px; left: 12px; gap: 8px; }
+    h1 { font-size: 19px; }
+    #status { font-size: 11px; padding: 4px 10px; }
+    #pickers { top: 58px; left: 12px; right: 12px; gap: 6px; align-items: stretch; }
+    .picker {
+      max-width: none; flex-wrap: nowrap; justify-content: flex-start;
+      overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    }
+    .picker::-webkit-scrollbar { display: none; }
+    .picker button { flex: 0 0 auto; }
+  }
 
   /* ---------- chat log ---------- */
   #log {

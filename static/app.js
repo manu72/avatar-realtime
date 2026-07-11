@@ -4,18 +4,34 @@ const $ = (s) => document.querySelector(s);
 
 /* ---------- assets ---------- */
 const SPRITES = {
-  "Seifuku 🎀":  { closed: "/assets/sprites/uniform_closed.png", half: "/assets/sprites/uniform_half.png", open: "/assets/sprites/uniform_open.png" },
-  "Sundress 🌿": { closed: "/assets/sprites/casual_closed.png",  half: "/assets/sprites/casual_half.png",  open: "/assets/sprites/casual_open.png" },
-  "Swimsuit 🩱": { closed: "/assets/sprites/swim_closed.png",    half: "/assets/sprites/swim_half.png",    open: "/assets/sprites/swim_open.png" },
-  "Gym 🏃‍♀️":     { closed: "/assets/sprites/gym_closed.png",     half: "/assets/sprites/gym_half.png",     open: "/assets/sprites/gym_open.png" },
+  "Seifuku 🎀": {
+    closed: "/assets/sprites/uniform_closed.webp",
+    half: "/assets/sprites/uniform_half.webp",
+    open: "/assets/sprites/uniform_open.webp",
+  },
+  "Sundress 🌿": {
+    closed: "/assets/sprites/casual_closed.webp",
+    half: "/assets/sprites/casual_half.webp",
+    open: "/assets/sprites/casual_open.webp",
+  },
+  "Swimsuit 🩱": {
+    closed: "/assets/sprites/swim2_closed.webp",
+    half: "/assets/sprites/swim2_half.webp",
+    open: "/assets/sprites/swim2_half.webp",
+  },
+  "Gym 🏃‍♀️": {
+    closed: "/assets/sprites/gym_closed.webp",
+    half: "/assets/sprites/gym_half.webp",
+    open: "/assets/sprites/gym_open.webp",
+  },
 };
 const BACKGROUNDS = {
-  "Bedroom 🛏":  "url(/assets/bg/bedroom.png)",
-  "Sakura 🌸":  "url(/assets/bg/sakura.png)",
-  "Beach 🏖":   "url(/assets/bg/beach.png)",
-  "Fuji 🗻":    "url(/assets/bg/fuji.png)",
-  "Onsen ♨️":   "url(/assets/bg/onsen.png)",
-  "Dream ☁️":   "linear-gradient(160deg,#ffd9e8 0%,#e8d9ff 50%,#d0f4e0 100%)",
+  "Bedroom 🛏": "url(/assets/bg/bedroom.webp)",
+  "Sakura 🌸": "url(/assets/bg/sakura.webp)",
+  "Beach 🏖": "url(/assets/bg/beach.webp)",
+  "Fuji 🗻": "url(/assets/bg/fuji.webp)",
+  "Onsen ♨️": "url(/assets/bg/onsen.webp)",
+  // "Dream ☁️": "linear-gradient(160deg,#ffd9e8 0%,#e8d9ff 50%,#d0f4e0 100%)",
 };
 
 const mouthImgs = { closed: $("#m-closed"), half: $("#m-half"), open: $("#m-open") };
@@ -27,9 +43,18 @@ const cleanLabel = (s) => s.replace(/[^\p{L}\p{N} ]/gu, "").trim(); // drop chip
 function sendScene(announce = true) {
   if (!ws || ws.readyState !== 1) return;
   clearTimeout(sceneTimer); // debounce rapid chip-clicking into one update
-  sceneTimer = setTimeout(() => ws.send(JSON.stringify({
-    type: "scene", outfit: cleanLabel(currentOutfit), background: cleanLabel(currentBg), announce,
-  })), announce ? 600 : 0);
+  sceneTimer = setTimeout(
+    () =>
+      ws.send(
+        JSON.stringify({
+          type: "scene",
+          outfit: cleanLabel(currentOutfit),
+          background: cleanLabel(currentBg),
+          announce,
+        }),
+      ),
+    announce ? 600 : 0,
+  );
 }
 
 function setOutfit(name) {
@@ -45,8 +70,7 @@ function setBackground(name) {
   sendScene();
 }
 function markOn(pickerSel, name) {
-  for (const b of document.querySelectorAll(pickerSel + " button"))
-    b.classList.toggle("on", b.textContent === name);
+  for (const b of document.querySelectorAll(pickerSel + " button")) b.classList.toggle("on", b.textContent === name);
 }
 function buildPicker(sel, names, onPick) {
   const el = $(sel);
@@ -63,7 +87,10 @@ buildPicker("#outfit-picker", Object.keys(SPRITES), setOutfit);
 
 // preload every sprite so mouth swaps never flicker
 for (const outfit of Object.values(SPRITES))
-  for (const url of Object.values(outfit)) { const i = new Image(); i.src = url; }
+  for (const url of Object.values(outfit)) {
+    const i = new Image();
+    i.src = url;
+  }
 
 setOutfit(Object.keys(SPRITES)[0]);
 setBackground(Object.keys(BACKGROUNDS)[0]);
@@ -75,20 +102,33 @@ function setMouth(state) {
 
 /* ---------- status ---------- */
 const statusEl = $("#status");
-function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = cls || ""; }
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls || "";
+}
 
 /* ---------- websocket ---------- */
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => { setStatus("ready — talk to me!", "ok"); sendScene(false); };
-  ws.onclose = () => { setStatus("reconnecting…"); setTimeout(connect, 1500); };
+  ws.onopen = () => {
+    setStatus("ready — talk to me!", "ok");
+    sendScene(false);
+  };
+  ws.onclose = () => {
+    setStatus("reconnecting…");
+    setTimeout(connect, 1500);
+  };
   ws.onmessage = (e) => {
     if (e.data instanceof ArrayBuffer) return playChunk(e.data);
     const m = JSON.parse(e.data);
-    if (m.type === "interrupted") { stopPlayback(); bubbles.her = null; } // close cut-off bubble
-    else if (m.type === "turn_complete") { bubbles.you = bubbles.her = null; }
-    else if (m.type === "you" || m.type === "her") appendTranscript(m.type, m.text);
+    if (m.type === "interrupted") {
+      stopPlayback();
+      bubbles.her = null;
+    } // close cut-off bubble
+    else if (m.type === "turn_complete") {
+      bubbles.you = bubbles.her = null;
+    } else if (m.type === "you" || m.type === "her") appendTranscript(m.type, m.text);
   };
 }
 
@@ -107,7 +147,9 @@ function appendTranscript(role, text) {
 }
 
 /* ---------- voice playback (24 kHz pcm16) ---------- */
-let playCtx, analyser, nextT = 0;
+let playCtx,
+  analyser,
+  nextT = 0;
 const active = new Set();
 
 function ensurePlayCtx() {
@@ -135,21 +177,29 @@ function playChunk(arrayBuffer) {
 }
 
 function stopPlayback() {
-  for (const s of active) { try { s.stop(); } catch {} }
+  for (const s of active) {
+    try {
+      s.stop();
+    } catch {}
+  }
   active.clear();
   nextT = 0;
 }
 
 /* ---------- lip sync: amplitude of playing voice -> mouth frame ---------- */
 const td = new Uint8Array(1024);
-let mouth = "closed", lastSwap = 0;
+let mouth = "closed",
+  lastSwap = 0;
 function lipLoop() {
   const ts = performance.now();
   let rms = 0;
   if (analyser && active.size) {
     analyser.getByteTimeDomainData(td);
     let sum = 0;
-    for (let i = 0; i < td.length; i++) { const v = (td[i] - 128) / 128; sum += v * v; }
+    for (let i = 0; i < td.length; i++) {
+      const v = (td[i] - 128) / 128;
+      sum += v * v;
+    }
     rms = Math.sqrt(sum / td.length);
   }
   const talking = rms > 0.015;
@@ -161,8 +211,12 @@ function lipLoop() {
   let next;
   if (rms < 0.015) next = "closed";
   else if (rms < 0.055) next = "half";
-  else next = (mouth === "open" && Math.random() < 0.35) ? "half" : "open"; // flutter on loud vowels
-  if (next !== mouth) { setMouth(next); mouth = next; lastSwap = ts; }
+  else next = mouth === "open" && Math.random() < 0.35 ? "half" : "open"; // flutter on loud vowels
+  if (next !== mouth) {
+    setMouth(next);
+    mouth = next;
+    lastSwap = ts;
+  }
 }
 // ponytail: setInterval over rAF — keeps animating when the tab is occluded/throttled
 setInterval(lipLoop, 40);
@@ -206,13 +260,22 @@ async function startMic() {
   let voiceRun = 0;
   node.port.onmessage = (e) => {
     if (ws && ws.readyState === 1) ws.send(e.data);
-    if (!active.size) { voiceRun = 0; return; } // only gate while she is speaking
+    if (!active.size) {
+      voiceRun = 0;
+      return;
+    } // only gate while she is speaking
     const i16 = new Int16Array(e.data);
     let sum = 0;
-    for (let i = 0; i < i16.length; i++) { const v = i16[i] / 32768; sum += v * v; }
+    for (let i = 0; i < i16.length; i++) {
+      const v = i16[i] / 32768;
+      sum += v * v;
+    }
     // ponytail: fixed RMS threshold; adaptive ambient-noise floor if it misfires
     voiceRun = Math.sqrt(sum / i16.length) > 0.04 ? voiceRun + 1 : 0;
-    if (voiceRun >= 3) { stopPlayback(); voiceRun = 0; } // ~100ms of sustained voice
+    if (voiceRun >= 3) {
+      stopPlayback();
+      voiceRun = 0;
+    } // ~100ms of sustained voice
   };
   micCtx.createMediaStreamSource(micStream).connect(node);
   micBtn.classList.add("live");
@@ -232,7 +295,10 @@ micBtn.onclick = () => (micCtx ? stopMic() : startMic().catch((e) => setStatus("
 /* ---------- text input ---------- */
 // explicit Enter-to-send: implicit form submission is unreliable in embedded browsers
 $("#msg").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); $("#bar").requestSubmit(); }
+  if (e.key === "Enter") {
+    e.preventDefault();
+    $("#bar").requestSubmit();
+  }
 });
 
 $("#bar").onsubmit = (e) => {
@@ -252,8 +318,12 @@ const memModal = $("#mem-modal");
 memModal.hidden = true;
 
 function renderMemory(view) {
-  const m = view.memory, p = m.profile;
-  const row = (label, val) => (val && val.length ? `<dt>${label}</dt><dd>${Array.isArray(val) ? val.map(v => "• " + v).join("<br>") : val}</dd>` : "");
+  const m = view.memory,
+    p = m.profile;
+  const row = (label, val) =>
+    val && val.length
+      ? `<dt>${label}</dt><dd>${Array.isArray(val) ? val.map((v) => "• " + v).join("<br>") : val}</dd>`
+      : "";
   $("#mem-view").innerHTML =
     `<dl>` +
     `<dt>Chats so far</dt><dd>${view.interaction_count}${view.first_seen_at ? " (first met " + view.first_seen_at.slice(0, 10) + ")" : ""}</dd>` +
@@ -264,7 +334,8 @@ function renderMemory(view) {
     row("Relationship notes", m.relationship_summary) +
     `</dl>` +
     (!p.preferred_name && !p.facts.length && !p.preferences.length && !p.projects.length && !m.relationship_summary
-      ? "<p>Nothing yet — Sakura writes her notes shortly after each chat ends.</p>" : "");
+      ? "<p>Nothing yet — Sakura writes her notes shortly after each chat ends.</p>"
+      : "");
   $("#mem-json").value = JSON.stringify(m, null, 2);
 }
 
@@ -285,9 +356,9 @@ function api(method, url, body) {
 async function memoryAction(fn) {
   try {
     renderMemory(await fn());
-  } catch (e) { // e.g. the server is still running pre-memory code
-    $("#mem-view").textContent =
-      "Couldn't load memory (" + e.message + "). Restart server.py and reload the page.";
+  } catch (e) {
+    // e.g. the server is still running pre-memory code
+    $("#mem-view").textContent = "Couldn't load memory (" + e.message + "). Restart server.py and reload the page.";
   }
 }
 
@@ -295,15 +366,26 @@ $("#mem-btn").onclick = () => {
   memModal.hidden = false;
   memoryAction(() => api("GET", "/memory"));
 };
-$("#mem-close").onclick = () => { memModal.hidden = true; };
-memModal.onclick = (e) => { if (e.target === memModal) memModal.hidden = true; }; // click outside card closes
+$("#mem-close").onclick = () => {
+  memModal.hidden = true;
+};
+memModal.onclick = (e) => {
+  if (e.target === memModal) memModal.hidden = true;
+}; // click outside card closes
 $("#mem-clear").onclick = () => {
   if (!confirm("Sakura will forget everything about you. Sure?")) return;
-  memoryAction(async () => { await api("POST", "/memory/clear"); return api("GET", "/memory"); });
+  memoryAction(async () => {
+    await api("POST", "/memory/clear");
+    return api("GET", "/memory");
+  });
 };
 $("#mem-save").onclick = () => {
   let doc;
-  try { doc = JSON.parse($("#mem-json").value); } catch { return alert("That's not valid JSON."); }
+  try {
+    doc = JSON.parse($("#mem-json").value);
+  } catch {
+    return alert("That's not valid JSON.");
+  }
   memoryAction(() => api("PUT", "/memory", JSON.stringify(doc)));
 };
 

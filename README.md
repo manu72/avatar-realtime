@@ -58,7 +58,7 @@ override with `SAKURA_DB_PATH`).
   fragments) are saved per session with start/end timestamps.
 - After a session disconnects — and additionally every
   `SAKURA_UPDATE_TURN_THRESHOLD` (default 12) completed turns — a background
-  task sends the old memory plus only the *unprocessed* turns to a fast Gemini
+  task sends the old memory plus only the _unprocessed_ turns to a fast Gemini
   text model (`SAKURA_MEMORY_MODEL`, default `gemini-2.5-flash`) which returns
   a complete replacement memory document. A per-user lock plus a `processed`
   marker on each turn guarantee every turn is folded in at most once, even on
@@ -97,17 +97,17 @@ prebuilt voices), then restart the server.
 
 ## Visual characteristics
 
-Sakura is a pink-haired, green-eyed anime girl rendered as layered PNG sprites
+Sakura is a pink-haired, green-eyed anime girl rendered as layered WEBP sprites
 with transparent backgrounds so she composites over any scene.
 
-| Aspect       | Details                                                                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| Look         | Long light-pink hair, bright green eyes (described in `PERSONA`; drawn in sprites)                                       |
-| Mouth states | `closed` / `half` / `open` — lip-synced from playback RMS every ~40 ms                                                   |
-| Outfits      | Seifuku (`uniform_*.png`), Sundress (`casual_*.png`), Swimsuit (`swim_*.png`), Gym (`gym_*.png`) under `assets/sprites/` |
-| Backgrounds  | Bedroom, Sakura park, Beach, Mt Fuji, Onsen (`assets/bg/`), plus a CSS “Dream” gradient                                  |
+| Aspect       | Details                                                                                                                      |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Look         | Long light-pink hair, bright green eyes (described in `PERSONA`; drawn in sprites)                                           |
+| Mouth states | `closed` / `half` / `open` — lip-synced from playback RMS every ~40 ms                                                       |
+| Outfits      | Seifuku (`uniform_*.webp`), Sundress (`casual_*.webp`), Swimsuit (`swim_*.webp`), Gym (`gym_*.webp`) under `assets/sprites/` |
+| Backgrounds  | Bedroom, Sakura park, Beach, Mt Fuji, Onsen (`assets/bg/`), plus a CSS “Dream” gradient                                      |
 
 Sprites were generated with GPT Image 2 (base image, then image-to-image mouth
 and outfit edits). Switch looks with the top-right chips, or add your own by
-dropping a PNG into `assets/` and one line into `SPRITES` or `BACKGROUNDS` in
+dropping a WEBP into `assets/` and one line into `SPRITES` or `BACKGROUNDS` in
 `static/app.js`.
