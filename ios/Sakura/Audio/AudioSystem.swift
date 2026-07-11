@@ -103,8 +103,8 @@ final class AudioSystem {
         // 2. session configuration, then activation
         let session = AVAudioSession.sharedInstance()
         do {
-            // .voiceChat enables echo cancellation — required so Sakura's own
-            // voice doesn't stream back up the mic and trip barge-in.
+            // .voiceChat tunes routing/EQ for VoIP; actual echo cancellation
+            // is enabled separately below via setVoiceProcessingEnabled.
             try session.setCategory(.playAndRecord, mode: .voiceChat,
                                     options: [.defaultToSpeaker, .allowBluetoothHFP])
             log.info("session category=\(session.category.rawValue) mode=\(session.mode.rawValue)")
@@ -121,6 +121,23 @@ final class AudioSystem {
         }
         let route = session.currentRoute
         log.info("route in=\(route.inputs.map(\.portType.rawValue).joined(separator: ",")) out=\(route.outputs.map(\.portType.rawValue).joined(separator: ","))")
+
+        // 2.5 acoustic echo cancellation. The .voiceChat session mode does
+        // NOT apply AEC to AVAudioEngine's raw input tap — without this,
+        // Sakura's speaker output loops into the mic and Gemini transcribes
+        // her as the user. Enabling voice processing inserts Apple's VoIP
+        // I/O unit (the one FaceTime uses), which subtracts the engine's own
+        // playback from the capture. Must be set while the engine is stopped,
+        // before formats are read (it can change the input format).
+        if !engine.inputNode.isVoiceProcessingEnabled {
+            do {
+                try engine.inputNode.setVoiceProcessingEnabled(true)
+                log.info("voice processing (AEC) enabled")
+            } catch {
+                // engine still works without it, just echo-prone — not fatal
+                log.error("voice processing enable failed: \(error.localizedDescription)")
+            }
+        }
 
         // 3. full graph before prepare/start — touch inputNode NOW so the IO
         //    unit is built full-duplex once, with a real input format
