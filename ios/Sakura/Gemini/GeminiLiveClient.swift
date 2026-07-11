@@ -35,7 +35,7 @@ final class GeminiLiveClient {
     private var closedReported = false
     private var pingTimer: Timer?
 
-    func connect(apiKey: String, systemInstruction: String) {
+    func connect(apiKey: String, character: Character, systemInstruction: String) {
         var comps = URLComponents(string: Self.endpoint)!
         comps.queryItems = [URLQueryItem(name: "key", value: apiKey)]
         closedReported = false
@@ -43,7 +43,7 @@ final class GeminiLiveClient {
         t.maximumMessageSize = 8 * 1024 * 1024
         task = t
         t.resume()
-        send(ClientMessage(setup: .sakura(systemInstruction: systemInstruction)))
+        send(ClientMessage(setup: .make(for: character, systemInstruction: systemInstruction)))
         receiveLoop()
         startPings()
     }

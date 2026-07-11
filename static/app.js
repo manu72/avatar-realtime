@@ -1,35 +1,72 @@
-/* Sakura Chat — frontend: mic capture, audio playback, lip sync, UI. */
+/* Avatar Chat — frontend: mic capture, audio playback, lip sync, UI. */
 
 const $ = (s) => document.querySelector(s);
 
 /* ---------- assets ---------- */
-const SPRITES = {
-  "Gymwear 🏃‍♀️": {
-    closed: "/assets/sprites/gym_closed.webp",
-    half: "/assets/sprites/gym_half.webp",
-    open: "/assets/sprites/gym_open.webp",
+const CHARACTERS = {
+  sakura: {
+    name: "Sakura",
+    sigil: "✿",
+    petals: ["🌸", "✿"],
+    sprites: {
+      "Gymwear 🏃‍♀️": {
+        closed: "/assets/sprites/gym_closed.webp",
+        half: "/assets/sprites/gym_half.webp",
+        open: "/assets/sprites/gym_open.webp",
+      },
+      "Sundress 🌿": {
+        closed: "/assets/sprites/casual_closed.webp",
+        half: "/assets/sprites/casual_half.webp",
+        open: "/assets/sprites/casual_open.webp",
+      },
+      "Swimsuit 🩱": {
+        closed: "/assets/sprites/swim2_closed.webp",
+        half: "/assets/sprites/swim2_half.webp",
+        open: "/assets/sprites/swim2_half.webp",
+      },
+      "Seifuku 🎀": {
+        closed: "/assets/sprites/uniform_closed.webp",
+        half: "/assets/sprites/uniform_half.webp",
+        open: "/assets/sprites/uniform_open.webp",
+      },
+      "Nightgown 🌙": {
+        closed: "/assets/sprites/night_closed.webp",
+        half: "/assets/sprites/night_half.webp",
+        open: "/assets/sprites/night_open.webp",
+      },
+    },
   },
-  "Sundress 🌿": {
-    closed: "/assets/sprites/casual_closed.webp",
-    half: "/assets/sprites/casual_half.webp",
-    open: "/assets/sprites/casual_open.webp",
-  },
-  "Swimsuit 🩱": {
-    closed: "/assets/sprites/swim2_closed.webp",
-    half: "/assets/sprites/swim2_half.webp",
-    open: "/assets/sprites/swim2_half.webp",
-  },
-  "Seifuku 🎀": {
-    closed: "/assets/sprites/uniform_closed.webp",
-    half: "/assets/sprites/uniform_half.webp",
-    open: "/assets/sprites/uniform_open.webp",
-  },
-  "Nightgown 🌙": {
-    closed: "/assets/sprites/night_closed.webp",
-    half: "/assets/sprites/night_half.webp",
-    open: "/assets/sprites/night_open.webp",
+  namu: {
+    name: "Namu",
+    sigil: "✦",
+    petals: ["✦", "🍃"],
+    sprites: {
+      "Gymwear 🏋️": {
+        closed: "/assets/sprites/namu_gym_closed.webp",
+        half: "/assets/sprites/namu_gym_half.webp",
+        open: "/assets/sprites/namu_gym_open.webp",
+      },
+      "Casual 🧢": {
+        closed: "/assets/sprites/namu_casual_closed.webp",
+        half: "/assets/sprites/namu_casual_half.webp",
+        open: "/assets/sprites/namu_casual_open.webp",
+      },
+      "Swimtogs 🩳": {
+        closed: "/assets/sprites/namu_swim_closed.webp",
+        half: "/assets/sprites/namu_swim_half.webp",
+        open: "/assets/sprites/namu_swim_open.webp",
+      },
+      "Pajamas 🌙": {
+        closed: "/assets/sprites/namu_pajama_closed.webp",
+        half: "/assets/sprites/namu_pajama_half.webp",
+        open: "/assets/sprites/namu_pajama_open.webp",
+      },
+    },
   },
 };
+let charId = "sakura",
+  CHAR = CHARACTERS.sakura,
+  SPRITES = CHAR.sprites;
 const BACKGROUNDS = {
   "Fuji 🗻": "url(/assets/bg/fuji.webp)",
   "Sakura 🌸": "url(/assets/bg/sakura.webp)",
@@ -42,13 +79,13 @@ const BACKGROUNDS = {
 
 const mouthImgs = { closed: $("#m-closed"), half: $("#m-half"), open: $("#m-open") };
 
-/* tell Sakura what she's wearing and where she is */
+/* tell the character what they're wearing and where they are */
 let ws; // declared here: sendScene runs during initial setOutfit, before the websocket section
 let currentOutfit, currentBg, sceneTimer;
 const cleanLabel = (s) => s.replace(/[^\p{L}\p{N} ]/gu, "").trim(); // drop chip emoji
-// Sakura's own scene tools send clean names ("Swimsuit"); map back to chip labels
+// the character's own scene tools send clean names ("Swimsuit"); map back to chip labels
 const byCleanName = (keys) => Object.fromEntries(keys.map((k) => [cleanLabel(k), k]));
-const OUTFIT_LABELS = byCleanName(Object.keys(SPRITES));
+let OUTFIT_LABELS = byCleanName(Object.keys(SPRITES));
 const BG_LABELS = byCleanName(Object.keys(BACKGROUNDS));
 function sendScene(announce = true) {
   if (!ws || ws.readyState !== 1) return;
@@ -93,18 +130,31 @@ function buildPicker(sel, names, onPick) {
   }
 }
 buildPicker("#bg-picker", Object.keys(BACKGROUNDS), setBackground);
-buildPicker("#outfit-picker", Object.keys(SPRITES), setOutfit);
-
-// preload every sprite so mouth swaps never flicker
-for (const outfit of Object.values(SPRITES))
-  for (const url of Object.values(outfit)) {
-    const i = new Image();
-    i.src = url;
-  }
-
-setOutfit(Object.keys(SPRITES)[0]);
 setBackground(Object.keys(BACKGROUNDS)[0]);
 mouthImgs.closed.classList.add("on");
+
+function setCharacter(id) {
+  charId = CHARACTERS[id] ? id : "sakura";
+  CHAR = CHARACTERS[charId];
+  SPRITES = CHAR.sprites;
+  OUTFIT_LABELS = byCleanName(Object.keys(SPRITES));
+  $("#outfit-picker").replaceChildren();
+  buildPicker("#outfit-picker", Object.keys(SPRITES), setOutfit);
+  // preload every sprite so mouth swaps never flicker
+  for (const outfit of Object.values(SPRITES))
+    for (const url of Object.values(outfit)) {
+      const i = new Image();
+      i.src = url;
+    }
+  const label = `${CHAR.name} ${CHAR.sigil}`;
+  document.title = label + " Chat";
+  $("h1").textContent = label + " Chat";
+  document.documentElement.style.setProperty("--char-label", `"${label}"`);
+  $("#msg").placeholder = `Say something to ${CHAR.name}…`;
+  $("#mem-btn").title = `What ${CHAR.name} remembers about you`;
+  $("#mem-title").textContent = `🧠 ${CHAR.name}'s memory of you`;
+  setOutfit(Object.keys(SPRITES)[0]);
+}
 
 function setMouth(state) {
   for (const [k, img] of Object.entries(mouthImgs)) img.classList.toggle("on", k === state);
@@ -119,7 +169,7 @@ function setStatus(text, cls) {
 
 /* ---------- websocket ---------- */
 function connect() {
-  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?character=${charId}`);
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
     setStatus("ready — talk to me!", "ok");
@@ -219,7 +269,7 @@ function lipLoop() {
   }
   const talking = rms > 0.015;
   document.body.classList.toggle("speaking", talking);
-  if (talking) setStatus("Sakura is speaking ♪", "talk");
+  if (talking) setStatus(`${CHAR.name} is speaking ♪`, "talk");
   else if (statusEl.classList.contains("talk")) setStatus("ready — talk to me!", "ok");
 
   if (ts - lastSwap < 70) return; // hold each frame ≥70ms so it reads as speech
@@ -388,7 +438,7 @@ memModal.onclick = (e) => {
   if (e.target === memModal) memModal.hidden = true;
 }; // click outside card closes
 $("#mem-clear").onclick = () => {
-  if (!confirm("Sakura will forget everything about you. Sure?")) return;
+  if (!confirm(`${CHAR.name} will forget everything about you. Sure?`)) return;
   memoryAction(async () => {
     await api("POST", "/memory/clear");
     return api("GET", "/memory");
@@ -405,20 +455,24 @@ $("#mem-save").onclick = () => {
 };
 
 /* ---------- petals ---------- */
-for (let i = 0; i < 10; i++) {
-  const p = document.createElement("span");
-  p.className = "petal";
-  p.textContent = Math.random() < 0.5 ? "🌸" : "✿";
-  p.style.left = Math.random() * 100 + "vw";
-  p.style.fontSize = 12 + Math.random() * 16 + "px";
-  p.style.animationDuration = 9 + Math.random() * 14 + "s";
-  p.style.animationDelay = -Math.random() * 20 + "s";
-  document.body.appendChild(p);
+function spawnPetals() {
+  for (let i = 0; i < 10; i++) {
+    const p = document.createElement("span");
+    p.className = "petal";
+    p.textContent = CHAR.petals[Math.random() < 0.5 ? 0 : 1];
+    p.style.left = Math.random() * 100 + "vw";
+    p.style.fontSize = 12 + Math.random() * 16 + "px";
+    p.style.animationDuration = 9 + Math.random() * 14 + "s";
+    p.style.animationDelay = -Math.random() * 20 + "s";
+    document.body.appendChild(p);
+  }
 }
 
 /* ---------- boot: browsers require a gesture before audio ---------- */
-/* called by the overlay's inline onclick in index.html */
-window.bootApp = () => {
+/* called by the splash cards' inline onclick in index.html; Sakura is the default */
+window.bootApp = (id) => {
+  setCharacter(id || "sakura");
+  spawnPetals();
   ensurePlayCtx();
   playCtx.resume();
   connect();

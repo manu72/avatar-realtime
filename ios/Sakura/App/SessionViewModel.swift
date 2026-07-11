@@ -19,7 +19,8 @@ final class SessionViewModel: ObservableObject {
     @Published var statusKind: StatusKind = .idle
     @Published var bubbles: [Bubble] = []
     @Published var mouth: Mouth = .closed
-    @Published var outfit = Outfit.all[0]
+    @Published var character = Character.all[0]   // Sakura is the default
+    @Published var outfit = Character.all[0].outfits[0]
     @Published var backdrop = Backdrop.all[0]
     @Published var micLive = false
     @Published var sessionStarted = false
@@ -45,12 +46,14 @@ final class SessionViewModel: ObservableObject {
 
     // MARK: - Session lifecycle
 
-    func startSession() {
+    func startSession(as chosen: Character = Character.all[0]) {
         guard !AppConfig.geminiAPIKey.isEmpty else {
             apiKeyMissing = true
             return
         }
         guard !sessionStarted else { return }
+        character = chosen
+        outfit = chosen.outfits[0]
         Task { await startSessionResolvingAudio() }
     }
 
@@ -102,8 +105,8 @@ final class SessionViewModel: ObservableObject {
         Task {
             await memory.touchSession()
             let section = formatMemorySection(await memory.current)
-            let instruction = Sakura.persona + (section.isEmpty ? "" : "\n\n" + section)
-            c.connect(apiKey: AppConfig.geminiAPIKey, systemInstruction: instruction)
+            let instruction = character.persona + (section.isEmpty ? "" : "\n\n" + section)
+            c.connect(apiKey: AppConfig.geminiAPIKey, character: character, systemInstruction: instruction)
         }
     }
 
@@ -233,7 +236,7 @@ final class SessionViewModel: ObservableObject {
         var ok = false
         switch name {
         case "set_outfit":
-            if let o = Outfit.all.first(where: { $0.clean == args["outfit"] }) {
+            if let o = character.outfits.first(where: { $0.clean == args["outfit"] }) {
                 outfit = o
                 ok = true
             }
@@ -322,7 +325,7 @@ final class SessionViewModel: ObservableObject {
         let rms = audio.isSpeaking ? audio.playbackLevel : 0
         let talking = rms > 0.015
         if talking {
-            setStatus("Sakura is speaking ♪", .talk)
+            setStatus("\(character.name) is speaking ♪", .talk)
         } else if statusKind == .talk {
             setStatus(micLive ? "listening…" : "ready — talk to me!", .ok)
         }

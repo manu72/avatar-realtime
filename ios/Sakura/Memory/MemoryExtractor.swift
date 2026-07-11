@@ -5,7 +5,7 @@ import Foundation
 /// path. Prompt ported verbatim from memory.py.
 struct MemoryExtractor {
     var apiKey: String
-    var model = Sakura.memoryModel
+    var model = Gemini.memoryModel
 
     enum ExtractionError: Error { case badResponse, emptyText }
 

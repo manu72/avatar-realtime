@@ -11,7 +11,7 @@ struct ContentView: View {
             avatar
             VStack(spacing: 8) {
                 header
-                chipRow(Outfit.all, selected: vm.outfit.id) { vm.setOutfit($0) }
+                chipRow(vm.character.outfits, selected: vm.outfit.id) { vm.setOutfit($0) }
                 chipRow(Backdrop.all, selected: vm.backdrop.id) { vm.setBackdrop($0) }
                 Spacer(minLength: 0)
                 transcript
@@ -178,17 +178,47 @@ struct ContentView: View {
     private var startOverlay: some View {
         ZStack {
             Color.black.opacity(0.45).ignoresSafeArea()
-            VStack(spacing: 12) {
-                Text("🌸").font(.system(size: 56))
-                Text("Tap to meet Sakura")
+            VStack(spacing: 16) {
+                Text("✿ Avatar Chat ✦")
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
+                Text("who do you want to chat with?")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.8))
+                HStack(spacing: 16) {
+                    ForEach(Character.all) { c in
+                        characterCard(c)
+                    }
+                }
                 Text("voice chat starts right away")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.8))
             }
         }
         .contentShape(Rectangle())
+        // tapping outside the cards starts Sakura, the default — same as web
         .onTapGesture { vm.startSession() }
+    }
+
+    private func characterCard(_ c: Character) -> some View {
+        Button { vm.startSession(as: c) } label: {
+            VStack(spacing: 8) {
+                if let img = SpriteLoader.image(c.outfits[0].sprite(for: .closed)) {
+                    Image(uiImage: img)
+                        .resizable().scaledToFill()
+                        .frame(width: 96, height: 128, alignment: .top)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .background(
+                            LinearGradient(colors: [.pink.opacity(0.4), .mint.opacity(0.4)],
+                                           startPoint: .top, endPoint: .bottom),
+                            in: RoundedRectangle(cornerRadius: 14))
+                }
+                Text("\(c.name) \(c.sigil)")
+                    .font(.headline)
+                    .foregroundStyle(c.id == "namu" ? Color.teal : Color.pink)
+            }
+            .padding(12)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        }
     }
 }

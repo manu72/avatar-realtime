@@ -1,6 +1,7 @@
 # Sakura for iOS
 
-A fully self-contained native port of the Sakura voice-chat web app. It talks
+A fully self-contained native port of the voice-chat web app — pick **Sakura**
+(the default) or **Namu** on the start screen, then chat by voice. It talks
 **directly to the Gemini Live API** — the Python server (`server.py`) is not
 used, not required, and not touched. This is an MVP for local testing on a
 small number of physical iPhones, not an App Store build.
@@ -27,8 +28,9 @@ ios/Sakura/
 ```
 
 The web app's `server.py` + `app.js` are the behavioural reference: same
-model (`gemini-3.1-flash-live-preview`), same voice (Leda), same persona text,
-same VAD/barge-in tuning, same memory document shape and extraction prompt.
+model (`gemini-3.1-flash-live-preview`), same characters and voices (Sakura:
+Leda, Namu: Enceladus), same persona text, same VAD/barge-in tuning, same memory
+document shape and extraction prompt.
 
 ## How Gemini Live is connected
 
@@ -38,8 +40,8 @@ same VAD/barge-in tuning, same memory document shape and extraction prompt.
 wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=<API_KEY>
 ```
 
-The first message is a `setup` payload (model, AUDIO response modality, Leda
-voice, system instruction with the memory block appended, high-sensitivity
+The first message is a `setup` payload (model, AUDIO response modality, the
+character's voice, system instruction with the memory block appended, high-sensitivity
 VAD with 100 ms prefix padding, input/output transcription, context-window
 compression). After `setupComplete`, mic audio streams up as `realtimeInput`
 chunks and typed messages go as `clientContent` turns. Server frames carry
@@ -82,14 +84,15 @@ backend instead.
 
 1. `open ios/Sakura.xcodeproj`
 2. Xcode ▸ Settings ▸ Accounts: sign in, then select your team under
-   *Sakura target ▸ Signing & Capabilities* (or set `DEVELOPMENT_TEAM` in
+   _Sakura target ▸ Signing & Capabilities_ (or set `DEVELOPMENT_TEAM` in
    `Secrets.xcconfig`). If the bundle ID collides, change
    `PRODUCT_BUNDLE_IDENTIFIER`.
 3. Create `Config/Secrets.xcconfig` as above with your Gemini key.
 4. Plug in the iPhone, select it as the run destination, press Run.
 5. First install: on the phone, Settings ▸ General ▸ VPN & Device
    Management ▸ trust your developer certificate.
-6. Launch and tap **Tap to meet Sakura** — the microphone permission prompt
+6. Launch and pick a character on the start screen (tapping elsewhere starts
+   Sakura, the default) — the microphone permission prompt
    appears immediately (audio can't start without it: the engine is
    deliberately not initialised until permission resolves). Grant it, then
    tap the mic button and talk.
