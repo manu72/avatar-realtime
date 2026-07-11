@@ -14,7 +14,7 @@ struct Outfit: Identifiable, Hashable {
 
     func sprite(for mouth: Mouth) -> String { sprites[mouth] ?? sprites[.closed]! }
 
-    static let all: [Outfit] = [
+    static let sakura: [Outfit] = [
         Outfit(name: "Seifuku 🎀", clean: "Seifuku",
                sprites: [.closed: "uniform_closed", .half: "uniform_half", .open: "uniform_open"]),
         Outfit(name: "Sundress 🌿", clean: "Sundress",
@@ -25,6 +25,17 @@ struct Outfit: Identifiable, Hashable {
                sprites: [.closed: "gym_closed", .half: "gym_half", .open: "gym_open"]),
         Outfit(name: "Nightgown 🌙", clean: "Nightgown",
                sprites: [.closed: "night_closed", .half: "night_half", .open: "night_open"]),
+    ]
+
+    static let namu: [Outfit] = [
+        Outfit(name: "Gymwear 🏋️", clean: "Gymwear",
+               sprites: [.closed: "namu_gym_closed", .half: "namu_gym_half", .open: "namu_gym_open"]),
+        Outfit(name: "Casual 🧢", clean: "Casual",
+               sprites: [.closed: "namu_casual_closed", .half: "namu_casual_half", .open: "namu_casual_open"]),
+        Outfit(name: "Swimtogs 🩳", clean: "Swimtogs",
+               sprites: [.closed: "namu_swim_closed", .half: "namu_swim_half", .open: "namu_swim_open"]),
+        Outfit(name: "Pajamas 🌙", clean: "Pajamas",
+               sprites: [.closed: "namu_pajama_closed", .half: "namu_pajama_half", .open: "namu_pajama_open"]),
     ]
 }
 

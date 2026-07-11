@@ -61,7 +61,7 @@ final class GeminiMessageTests: XCTestCase {
     // MARK: Client → server encoding
 
     func testSetupMessageMirrorsWebServerConfig() throws {
-        let setup = ClientMessage.Setup.sakura(systemInstruction: "You are Sakura.")
+        let setup = ClientMessage.Setup.make(for: Character.all[0], systemInstruction: "You are Sakura.")
         let data = try JSONEncoder().encode(ClientMessage(setup: setup))
         let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         let s = try XCTUnwrap(obj["setup"] as? [String: Any])
@@ -99,20 +99,35 @@ final class GeminiMessageTests: XCTestCase {
     }
 
     func testSetupDeclaresWardrobeTools() throws {
-        let setup = ClientMessage.Setup.sakura(systemInstruction: "x")
-        let data = try JSONEncoder().encode(ClientMessage(setup: setup))
-        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let s = try XCTUnwrap(obj["setup"] as? [String: Any])
-        let decls = try XCTUnwrap(
-            (s["tools"] as? [[String: Any]])?.first?["functionDeclarations"] as? [[String: Any]])
-        XCTAssertEqual(decls.compactMap { $0["name"] as? String }, ["set_outfit", "set_background"])
-        // enums must track the real wardrobe, or Sakura could request assets that don't exist
-        let outfitEnum = ((decls[0]["parameters"] as? [String: Any])?["properties"] as? [String: Any])
-            .flatMap { ($0["outfit"] as? [String: Any])?["enum"] as? [String] }
-        XCTAssertEqual(outfitEnum, Outfit.all.map(\.clean))
-        let bgEnum = ((decls[1]["parameters"] as? [String: Any])?["properties"] as? [String: Any])
-            .flatMap { ($0["background"] as? [String: Any])?["enum"] as? [String] }
-        XCTAssertEqual(bgEnum, Backdrop.all.map(\.clean))
+        // enums must track each character's real wardrobe, or the model could
+        // request assets that don't exist
+        for character in Character.all {
+            let setup = ClientMessage.Setup.make(for: character, systemInstruction: "x")
+            let data = try JSONEncoder().encode(ClientMessage(setup: setup))
+            let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            let s = try XCTUnwrap(obj["setup"] as? [String: Any])
+            let decls = try XCTUnwrap(
+                (s["tools"] as? [[String: Any]])?.first?["functionDeclarations"] as? [[String: Any]])
+            XCTAssertEqual(decls.compactMap { $0["name"] as? String }, ["set_outfit", "set_background"])
+            let outfitEnum = ((decls[0]["parameters"] as? [String: Any])?["properties"] as? [String: Any])
+                .flatMap { ($0["outfit"] as? [String: Any])?["enum"] as? [String] }
+            XCTAssertEqual(outfitEnum, character.outfits.map(\.clean))
+            let bgEnum = ((decls[1]["parameters"] as? [String: Any])?["properties"] as? [String: Any])
+                .flatMap { ($0["background"] as? [String: Any])?["enum"] as? [String] }
+            XCTAssertEqual(bgEnum, Backdrop.all.map(\.clean))
+        }
+    }
+
+    func testCharactersHaveDistinctVoicesAndWardrobes() {
+        let sakura = Character.all[0], namu = Character.all[1]
+        XCTAssertEqual(sakura.id, "sakura", "Sakura must stay the default (first) character")
+        XCTAssertEqual(sakura.voiceName, "Leda")
+        XCTAssertEqual(namu.voiceName, "Puck")
+        XCTAssertFalse(namu.outfits.map(\.clean).contains("Seifuku"))
+        XCTAssertFalse(sakura.outfits.map(\.clean).contains("Pajamas"))
+        let voice = ClientMessage.Setup.make(for: namu, systemInstruction: "x")
+            .generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName
+        XCTAssertEqual(voice, "Puck")
     }
 
     func testToolResponseEncoding() throws {

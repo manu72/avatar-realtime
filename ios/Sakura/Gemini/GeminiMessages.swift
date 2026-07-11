@@ -74,15 +74,15 @@ struct ClientMessage: Encodable {
             }
         }
 
-        /// Mirrors build_config() in server.py: audio out, Leda voice,
+        /// Mirrors build_config() in server.py: audio out, per-character voice,
         /// eager barge-in VAD, both transcriptions, context compression.
-        static func sakura(systemInstruction: String) -> Setup {
+        static func make(for character: Character, systemInstruction: String) -> Setup {
             Setup(
-                model: Sakura.liveModel,
+                model: Gemini.liveModel,
                 generationConfig: GenerationConfig(
                     responseModalities: ["AUDIO"],
                     speechConfig: SpeechConfig(
-                        voiceConfig: .init(prebuiltVoiceConfig: .init(voiceName: Sakura.voiceName))
+                        voiceConfig: .init(prebuiltVoiceConfig: .init(voiceName: character.voiceName))
                     )
                 ),
                 systemInstruction: TextContent(role: nil, parts: [.init(text: systemInstruction)]),
@@ -100,8 +100,8 @@ struct ClientMessage: Encodable {
                 // never request an outfit or place the app doesn't have
                 tools: [Tool(functionDeclarations: [
                     .init(name: "set_outfit",
-                          description: "Change the outfit Sakura is wearing. Call only after the user has clearly agreed to the change.",
-                          parameters: .init(properties: ["outfit": .init(enum: Outfit.all.map(\.clean))],
+                          description: "Change the outfit you are wearing. Call only after the user has clearly agreed to the change.",
+                          parameters: .init(properties: ["outfit": .init(enum: character.outfits.map(\.clean))],
                                             required: ["outfit"])),
                     .init(name: "set_background",
                           description: "Move the scene to a different location ('Sakura' is a cherry-blossom garden). Call only after the user has clearly agreed to go there.",
