@@ -35,6 +35,15 @@ final class GeminiMessageTests: XCTestCase {
         XCTAssertEqual(msg.serverContent?.outputTranscription?.text, "hi!")
     }
 
+    func testParsesToolCall() throws {
+        let msg = try decode(
+            #"{"toolCall": {"functionCalls": [{"id": "fc-1", "name": "set_outfit", "args": {"outfit": "Swimsuit"}}]}}"#)
+        let fc = try XCTUnwrap(msg.toolCall?.functionCalls?.first)
+        XCTAssertEqual(fc.id, "fc-1")
+        XCTAssertEqual(fc.name, "set_outfit")
+        XCTAssertEqual(fc.args?["outfit"], "Swimsuit")
+    }
+
     func testParsesGoAway() throws {
         let msg = try decode(#"{"goAway": {"timeLeft": "10s"}}"#)
         XCTAssertNotNil(msg.goAway)
@@ -87,6 +96,37 @@ final class GeminiMessageTests: XCTestCase {
                       || json.contains("\"mimeType\":\"audio/pcm;rate=16000\""))
         XCTAssertTrue(json.contains(pcm.base64EncodedString()))
         XCTAssertFalse(json.contains("setup"), "audio messages must contain exactly one top-level field")
+    }
+
+    func testSetupDeclaresWardrobeTools() throws {
+        let setup = ClientMessage.Setup.sakura(systemInstruction: "x")
+        let data = try JSONEncoder().encode(ClientMessage(setup: setup))
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let s = try XCTUnwrap(obj["setup"] as? [String: Any])
+        let decls = try XCTUnwrap(
+            (s["tools"] as? [[String: Any]])?.first?["functionDeclarations"] as? [[String: Any]])
+        XCTAssertEqual(decls.compactMap { $0["name"] as? String }, ["set_outfit", "set_background"])
+        // enums must track the real wardrobe, or Sakura could request assets that don't exist
+        let outfitEnum = ((decls[0]["parameters"] as? [String: Any])?["properties"] as? [String: Any])
+            .flatMap { ($0["outfit"] as? [String: Any])?["enum"] as? [String] }
+        XCTAssertEqual(outfitEnum, Outfit.all.map(\.clean))
+        let bgEnum = ((decls[1]["parameters"] as? [String: Any])?["properties"] as? [String: Any])
+            .flatMap { ($0["background"] as? [String: Any])?["enum"] as? [String] }
+        XCTAssertEqual(bgEnum, Backdrop.all.map(\.clean))
+    }
+
+    func testToolResponseEncoding() throws {
+        let msg = ClientMessage(toolResponse: .init(functionResponses: [
+            .init(id: "fc-1", name: "set_outfit", response: ["result": "ok"])
+        ]))
+        let data = try JSONEncoder().encode(msg)
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let tr = try XCTUnwrap(obj["toolResponse"] as? [String: Any])
+        let fr = try XCTUnwrap((tr["functionResponses"] as? [[String: Any]])?.first)
+        XCTAssertEqual(fr["id"] as? String, "fc-1")
+        XCTAssertEqual(fr["name"] as? String, "set_outfit")
+        XCTAssertEqual((fr["response"] as? [String: Any])?["result"] as? String, "ok")
+        XCTAssertNil(obj["setup"], "tool responses must contain exactly one top-level field")
     }
 
     func testTextMessageEncoding() throws {

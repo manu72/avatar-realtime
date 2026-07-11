@@ -21,6 +21,7 @@ struct ClientMessage: Encodable {
     var setup: Setup?
     var realtimeInput: RealtimeInput?
     var clientContent: ClientContent?
+    var toolResponse: ToolResponse?
 
     struct Setup: Encodable {
         var model: String
@@ -30,6 +31,7 @@ struct ClientMessage: Encodable {
         var inputAudioTranscription = EmptyObject()
         var outputAudioTranscription = EmptyObject()
         var contextWindowCompression: ContextWindowCompression
+        var tools: [Tool]
 
         struct GenerationConfig: Encodable {
             var responseModalities: [String]
@@ -54,6 +56,23 @@ struct ClientMessage: Encodable {
             var slidingWindow: SlidingWindow
             struct SlidingWindow: Encodable { var targetTokens: Int }
         }
+        struct Tool: Encodable {
+            var functionDeclarations: [FunctionDeclaration]
+            struct FunctionDeclaration: Encodable {
+                var name: String
+                var description: String
+                var parameters: Schema
+            }
+            struct Schema: Encodable {
+                var type = "OBJECT"
+                var properties: [String: Property]
+                var required: [String]
+                struct Property: Encodable {
+                    var type = "STRING"
+                    var `enum`: [String]
+                }
+            }
+        }
 
         /// Mirrors build_config() in server.py: audio out, Leda voice,
         /// eager barge-in VAD, both transcriptions, context compression.
@@ -76,7 +95,19 @@ struct ClientMessage: Encodable {
                 contextWindowCompression: ContextWindowCompression(
                     triggerTokens: 104_857,
                     slidingWindow: .init(targetTokens: 52_428)
-                )
+                ),
+                // enum values come from the real wardrobe, so the model can
+                // never request an outfit or place the app doesn't have
+                tools: [Tool(functionDeclarations: [
+                    .init(name: "set_outfit",
+                          description: "Change the outfit Sakura is wearing. Call only after the user has clearly agreed to the change.",
+                          parameters: .init(properties: ["outfit": .init(enum: Outfit.all.map(\.clean))],
+                                            required: ["outfit"])),
+                    .init(name: "set_background",
+                          description: "Move the scene to a different location ('Sakura' is a cherry-blossom garden). Call only after the user has clearly agreed to go there.",
+                          parameters: .init(properties: ["background": .init(enum: Backdrop.all.map(\.clean))],
+                                            required: ["background"])),
+                ])]
             )
         }
     }
@@ -93,6 +124,15 @@ struct ClientMessage: Encodable {
         var turns: [TextContent]
         var turnComplete: Bool
     }
+
+    struct ToolResponse: Encodable {
+        var functionResponses: [FunctionResponse]
+        struct FunctionResponse: Encodable {
+            var id: String?
+            var name: String
+            var response: [String: String]
+        }
+    }
 }
 
 // MARK: - Server → client
@@ -100,6 +140,7 @@ struct ClientMessage: Encodable {
 struct ServerMessage: Decodable {
     var setupComplete: EmptyObject?
     var serverContent: ServerContent?
+    var toolCall: ToolCall?
     var goAway: GoAway?
 
     struct ServerContent: Decodable {
@@ -121,4 +162,15 @@ struct ServerMessage: Decodable {
     }
     struct Transcription: Decodable { var text: String? }
     struct GoAway: Decodable { var timeLeft: String? }
+
+    struct ToolCall: Decodable {
+        var functionCalls: [FunctionCall]?
+        // our tools only declare STRING enum params, so [String: String] args
+        // decode everything Gemini can legally send for them
+        struct FunctionCall: Decodable {
+            var id: String?
+            var name: String?
+            var args: [String: String]?
+        }
+    }
 }
