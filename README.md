@@ -110,12 +110,12 @@ prebuilt voices), then restart the server.
 Sakura is a pink-haired, green-eyed anime girl rendered as layered WEBP sprites
 with transparent backgrounds so she composites over any scene.
 
-| Aspect       | Details                                                                                                                      |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Look         | Long light-pink hair, bright green eyes (described in `PERSONA`; drawn in sprites)                                           |
-| Mouth states | `closed` / `half` / `open` — lip-synced from playback RMS every ~40 ms                                                       |
-| Outfits      | Seifuku (`uniform_*.webp`), Sundress (`casual_*.webp`), Swimsuit (`swim_*.webp`), Gym (`gym_*.webp`) under `assets/sprites/` |
-| Backgrounds  | Bedroom, Sakura park, Beach, Mt Fuji, Onsen (`assets/bg/`), plus a CSS “Dream” gradient                                      |
+| Aspect       | Details                                                                                                                          |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| Look         | Long light-pink hair, bright green eyes (described in `PERSONA`; drawn in sprites)                                               |
+| Mouth states | `closed` / `half` / `open` — lip-synced from playback RMS every ~40 ms                                                           |
+| Outfits      | Seifuku (`uniform_*.webp`), Sundress (`casual_*.webp`), Swimsuit (`swim_*.webp`), Gymwear (`gym_*.webp`) under `assets/sprites/` |
+| Backgrounds  | Bedroom, Sakura park, Beach, Mt Fuji, Onsen (`assets/bg/`), plus a CSS “Dream” gradient                                          |
 
 Sprites were generated with GPT Image 2 (base image, then image-to-image mouth
 and outfit edits). Switch looks with the top-right chips, or add your own by

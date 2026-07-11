@@ -52,8 +52,11 @@ voice audio (`inlineData`), transcriptions, `interrupted` and `turnComplete`.
   with `AVAudioConverter`).
 - **Downstream:** 24 kHz mono 16-bit PCM, scheduled gaplessly onto an
   `AVAudioPlayerNode`.
-- The audio session uses `.playAndRecord` + `.voiceChat` (hardware echo
-  cancellation), so Sakura's voice doesn't feed back into the mic.
+- The audio session uses `.playAndRecord` + `.voiceChat`, and echo
+  cancellation is enabled explicitly with
+  `inputNode.setVoiceProcessingEnabled(true)` — Apple's VoIP voice-processing
+  unit subtracts the engine's own playback from the mic capture so Sakura's
+  voice doesn't feed back and get transcribed as the user speaking.
 - **Barge-in:** two layers, like the web app — Gemini's `interrupted` signal
   clears the queue, and a local RMS gate (~100 ms of sustained voice while
   she is speaking) mutes playback instantly without waiting for the
@@ -143,7 +146,9 @@ parsing/encoding. No test touches the network or needs an API key.
   route changes; if it still fails, disconnect Bluetooth audio, quit other
   audio apps, and tap again. Audio lifecycle logs are under subsystem
   `com.throwingeights.sakura`, category `audio`, in Console.app.
-- **Echo / self-interruption** — confirm nothing switched the session out of
-  `.voiceChat` mode (e.g. another audio app); relaunch.
+- **Echo / self-interruption (Sakura "hears herself")** — check Console for
+  `voice processing (AEC) enabled`; if it shows
+  `voice processing enable failed`, the current route refused the
+  voice-processing unit — disconnect Bluetooth audio and relaunch.
 - **No audio out on device but transcript works** — check the silent/ring
   switch; the session uses `.defaultToSpeaker`.
