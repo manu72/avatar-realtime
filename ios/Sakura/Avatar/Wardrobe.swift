@@ -23,6 +23,8 @@ struct Outfit: Identifiable, Hashable {
                sprites: [.closed: "swim2_closed", .half: "swim2_half", .open: "swim2_half"]),
         Outfit(name: "Gym 🏃‍♀️", clean: "Gym",
                sprites: [.closed: "gym_closed", .half: "gym_half", .open: "gym_open"]),
+        Outfit(name: "Nightgown 🌙", clean: "Nightgown",
+               sprites: [.closed: "night_closed", .half: "night_half", .open: "night_open"]),
     ]
 }
 
@@ -39,6 +41,7 @@ struct Backdrop: Identifiable, Hashable {
         Backdrop(name: "Beach 🏖", clean: "Beach", resource: "beach"),
         Backdrop(name: "Fuji 🗻", clean: "Fuji", resource: "fuji"),
         Backdrop(name: "Onsen ♨️", clean: "Onsen", resource: "onsen"),
+        Backdrop(name: "Gym 🏋️", clean: "Gym", resource: "gym"),
     ]
 }
 

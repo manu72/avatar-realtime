@@ -24,6 +24,11 @@ const SPRITES = {
     half: "/assets/sprites/gym_half.webp",
     open: "/assets/sprites/gym_open.webp",
   },
+  "Nightgown 🌙": {
+    closed: "/assets/sprites/night_closed.webp",
+    half: "/assets/sprites/night_half.webp",
+    open: "/assets/sprites/night_open.webp",
+  },
 };
 const BACKGROUNDS = {
   "Bedroom 🛏": "url(/assets/bg/bedroom.webp)",
@@ -31,6 +36,7 @@ const BACKGROUNDS = {
   "Beach 🏖": "url(/assets/bg/beach.webp)",
   "Fuji 🗻": "url(/assets/bg/fuji.webp)",
   "Onsen ♨️": "url(/assets/bg/onsen.webp)",
+  "Gym 🏋️": "url(/assets/bg/gym.webp)",
   // "Dream ☁️": "linear-gradient(160deg,#ffd9e8 0%,#e8d9ff 50%,#d0f4e0 100%)",
 };
 
