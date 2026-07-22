@@ -171,6 +171,17 @@ def resolve_uid(request):
     return raw if memory.valid_uid(raw) else memory.new_uid()
 
 
+def site_origin(request):
+    """Absolute origin for OG/canonical URLs. Prefer SITE_URL; else request host."""
+    configured = os.environ.get("SITE_URL", "").strip().rstrip("/")
+    if configured:
+        return configured
+    # Railway (and most proxies) set X-Forwarded-*; take the first value if comma-listed
+    proto = request.headers.get("X-Forwarded-Proto", request.scheme).split(",", 1)[0].strip()
+    host = request.headers.get("X-Forwarded-Host", request.host).split(",", 1)[0].strip()
+    return f"{proto}://{host}"
+
+
 def origin_allowed(request):
     """Same-origin is always fine; extra origins via ALLOWED_ORIGINS (comma-separated).
 
@@ -333,7 +344,10 @@ async def ws_handler(request):
 
 async def index(request):
     uid = resolve_uid(request)
-    resp = web.FileResponse(ROOT / "static" / "index.html")
+    # Social crawlers require absolute og:image/og:url; substitute per request.
+    html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    html = html.replace("__SITE_ORIGIN__", site_origin(request))
+    resp = web.Response(text=html, content_type="text/html", charset="utf-8")
     secure = request.headers.get("X-Forwarded-Proto", request.scheme) == "https"
     resp.set_cookie(UID_COOKIE, uid, max_age=UID_COOKIE_MAX_AGE,
                     httponly=True, samesite="Lax", secure=secure)
