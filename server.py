@@ -340,6 +340,11 @@ async def index(request):
     return resp
 
 
+async def favicon(request):
+    """Browsers still probe /favicon.ico by default; serve the real ICO there."""
+    return web.FileResponse(ROOT / "assets" / "favicons" / "favicon.ico")
+
+
 async def health(request):
     """Instant liveness probe for Railway: no Gemini call, no DB query."""
     checks = {"memory": request.app.get("db_ready", False), "gemini_key": client is not None}
@@ -394,6 +399,7 @@ app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
 app.on_cleanup.append(on_cleanup)
 app.router.add_get("/", index)
+app.router.add_get("/favicon.ico", favicon)
 app.router.add_get("/health", health)
 app.router.add_get("/ws", ws_handler)
 app.router.add_get("/memory", memory_get)
