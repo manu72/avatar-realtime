@@ -54,6 +54,7 @@ single-writer — run **one replica**.
 | `HOST`                  | `0.0.0.0`                    | Bind address                                                               |
 | `LOG_LEVEL`             | `INFO`                       | Python logging level                                                       |
 | `ALLOWED_ORIGINS`       | unset                        | Extra allowed browser origins, comma-separated; same-origin always allowed |
+| `SITE_URL`              | request host                 | Canonical public origin for OG/Twitter/canonical URLs (e.g. `https://sakura.example.com`) |
 | `SAKURA_DATA_DIR`       | repo dir                     | Directory for `sakura.db` (created automatically; use `/data` on Railway)  |
 | `SAKURA_DB_PATH`        | `$SAKURA_DATA_DIR/sakura.db` | Exact DB file path override                                                |
 | `SAKURA_MEMORY_MODEL`   | `gemini-2.5-flash`           | Text model used for memory extraction                                      |
@@ -94,6 +95,8 @@ static/
 assets/
   sprites/*.webp       mouth frames per outfit (closed/half/open); namu_* = Namu's
   bg/*.webp            painted background scenes
+  sakura-og.webp       primary Open Graph / Twitter share image (1200×800)
+  favicons/            browser + PWA icons + site.webmanifest
 ios/                   independent native SwiftUI app (own README, own tests);
                        talks directly to Gemini Live, never uses server.py
 RAILWAY_DEPLOYMENT.md  step-by-step Railway guide
