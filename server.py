@@ -230,8 +230,22 @@ async def ws_handler(request):
     # -- memory: resolve identity and load once, before the Live session starts
     uid = resolve_uid(request)
     user_row = await memory.touch_user(uid)
+    recent_turns = await memory.get_recent_turns(uid)
     mem_section = memory.format_memory_section(user_row)
-    system_instruction = character["intro"] + SHARED_PERSONA + ("\n\n" + mem_section if mem_section else "")
+    recent_section = memory.format_recent_turns_section(recent_turns)
+    system_instruction = character["intro"] + SHARED_PERSONA
+    if mem_section:
+        system_instruction += "\n\n" + mem_section
+    if recent_section:
+        system_instruction += "\n\n" + recent_section
+
+    # Replay prior turns into the chat UI on a fresh page (browser ignores if log
+    # already has messages — e.g. mid-session WebSocket reconnect).
+    if recent_turns:
+        await ws.send_json({
+            "type": "history",
+            "turns": [{"role": t["role"], "text": t["text"]} for t in recent_turns],
+        })
 
     session_id = uuid.uuid4().hex
     await memory.start_session(session_id, uid)

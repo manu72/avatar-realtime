@@ -47,18 +47,18 @@ single-writer — run **one replica**.
 
 ### Environment variables
 
-| Variable                | Default                      | Purpose                                                                    |
-| ----------------------- | ---------------------------- | -------------------------------------------------------------------------- |
-| `GEMINI_API_KEY`        | — (required)                 | Gemini API key for Live voice + memory extraction                          |
-| `PORT`                  | `8787`                       | Listen port (Railway sets this automatically)                              |
-| `HOST`                  | `0.0.0.0`                    | Bind address                                                               |
-| `LOG_LEVEL`             | `INFO`                       | Python logging level                                                       |
-| `ALLOWED_ORIGINS`       | unset                        | Extra allowed browser origins, comma-separated; same-origin always allowed |
+| Variable                | Default                      | Purpose                                                                                   |
+| ----------------------- | ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`        | — (required)                 | Gemini API key for Live voice + memory extraction                                         |
+| `PORT`                  | `8787`                       | Listen port (Railway sets this automatically)                                             |
+| `HOST`                  | `0.0.0.0`                    | Bind address                                                                              |
+| `LOG_LEVEL`             | `INFO`                       | Python logging level                                                                      |
+| `ALLOWED_ORIGINS`       | unset                        | Extra allowed browser origins, comma-separated; same-origin always allowed                |
 | `SITE_URL`              | request host                 | Canonical public origin for OG/Twitter/canonical URLs (e.g. `https://sakura.example.com`) |
-| `SAKURA_DATA_DIR`       | repo dir                     | Directory for `sakura.db` (created automatically; use `/data` on Railway)  |
-| `SAKURA_DB_PATH`        | `$SAKURA_DATA_DIR/sakura.db` | Exact DB file path override                                                |
-| `SAKURA_MEMORY_MODEL`   | `gemini-2.5-flash`           | Text model used for memory extraction                                      |
-| `SAKURA_MAX_FACTS` etc. | see `memory.py`              | Memory size caps and update threshold                                      |
+| `SAKURA_DATA_DIR`       | repo dir                     | Directory for `sakura.db` (created automatically; use `/data` on Railway)                 |
+| `SAKURA_DB_PATH`        | `$SAKURA_DATA_DIR/sakura.db` | Exact DB file path override                                                               |
+| `SAKURA_MEMORY_MODEL`   | `gemini-2.5-flash`           | Text model used for memory extraction                                                     |
+| `SAKURA_MAX_FACTS` etc. | see `memory.py`              | Memory size caps and update threshold                                                     |
 
 ## How it works
 
@@ -125,12 +125,18 @@ default — point it elsewhere with `SAKURA_DATA_DIR` or `SAKURA_DB_PATH`).
 - Each browser gets a random anonymous ID in a long-lived `sakura_uid` cookie
   (no accounts). A missing or mangled cookie just gets a fresh ID.
 - When a WebSocket session starts, the user's compact memory document is loaded
-  **once**, formatted into a bounded plain-text block (≤ ~1k tokens), and
+  **once**, formatted into a bounded plain-text block (≤ ~2k tokens), and
   appended to the persona as part of the Gemini Live `system_instruction`.
+  The last `SAKURA_MAX_RECENT_TURNS` (default 100) transcript turns are also
+  injected into that instruction so Gemini Live can continue after a browser
+  close/refresh (Live already keeps in-session context while the tab stays open).
+  The same turns are sent to the browser as a `history` WebSocket message so the
+  on-screen chat log can restore itself on a fresh page load.
   Memory is never queried again during the conversation, so the real-time
   voice path is untouched.
 - Completed text transcript turns (user + character, no audio, no streaming
-  fragments) are saved per session with start/end timestamps.
+  fragments) are saved per session; only the newest 100 turns are kept per user
+  (older rows are pruned on each insert).
 - After a session disconnects — and additionally every
   `SAKURA_UPDATE_TURN_THRESHOLD` (default 12) completed turns — a background
   task sends the old memory plus only the _unprocessed_ turns to a fast Gemini
@@ -141,8 +147,9 @@ default — point it elsewhere with `SAKURA_DATA_DIR` or `SAKURA_DB_PATH`).
 
 **What is retained**: facts you explicitly stated, durable preferences,
 recurring projects/topics, open threads, plus a short relationship summary —
-all size-capped (`SAKURA_MAX_FACTS` 15, `SAKURA_MAX_PREFERENCES` 10,
-`SAKURA_MAX_PROJECTS` 8, `SAKURA_MAX_SUMMARY_CHARS` 600). Not retained:
+all size-capped (`SAKURA_MAX_FACTS` 30, `SAKURA_MAX_PREFERENCES` 20,
+`SAKURA_MAX_PROJECTS` 16, `SAKURA_MAX_SUMMARY_CHARS` 1200) — and the last 100
+raw transcript turns. Not retained in the compact document:
 inferences/guesses, Sakura's own claims, small talk, duplicates.
 
 **Inspect / edit / clear**: click the 🧠 button in the app (or
@@ -156,8 +163,8 @@ audio, cookies, or API keys are stored in memory documents.
 **Limitations**: identity is per-browser (clear cookies → they forget you);
 memory is shared across characters (Namu knows what you told Sakura);
 extraction quality depends on the text model; graceful shutdown flushes pending
-memory writes (a hard kill can still lose the last extraction); the on-screen
-chat log is still display-only.
+memory writes (a hard kill can still lose the last extraction); chat-log
+restore only fills an empty UI (mid-session reconnects keep the live bubbles).
 
 Tests: `.venv/bin/python -m unittest test_memory -v` (extraction is mocked; no
 API access needed).

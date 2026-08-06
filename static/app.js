@@ -188,6 +188,15 @@ function connect() {
     } // close cut-off bubble
     else if (m.type === "turn_complete") {
       bubbles.you = bubbles.her = null;
+    } else if (m.type === "history" && Array.isArray(m.turns)) {
+      // Only restore after a full page load/refresh — keep live bubbles on WS reconnect
+      if (log.children.length) return;
+      for (const t of m.turns) {
+        const role = t.role === "user" ? "you" : "her";
+        if (!t.text) continue;
+        appendTranscript(role, t.text);
+        bubbles[role] = null; // each stored turn is already complete
+      }
     } else if (m.type === "you" || m.type === "her") appendTranscript(m.type, m.text);
     else if (m.type === "set_scene") {
       // server already validated against the allow-list; unknown names are ignored anyway
@@ -205,7 +214,8 @@ function appendTranscript(role, text) {
     bubbles[role] = document.createElement("div");
     bubbles[role].className = "bub " + role;
     log.appendChild(bubbles[role]);
-    while (log.children.length > 40) log.firstChild.remove();
+    // Match the server-side recent-turn window so restored history stays visible
+    while (log.children.length > 100) log.firstChild.remove();
   }
   bubbles[role].append(text);
   log.scrollTop = log.scrollHeight;
