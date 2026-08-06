@@ -3,7 +3,8 @@
 SQLite (stdlib sqlite3) holding, per anonymous user:
   - a compact JSON memory document (profile facts, preferences, projects, summary)
   - interaction counters and timestamps
-  - completed text transcript turns, used later for memory extraction
+  - the last MAX_RECENT_TURNS completed text transcript turns (for extraction,
+    and for re-injecting context + UI history after a browser refresh)
 
 Nothing in this module runs in the real-time audio path: all DB work goes
 through asyncio.to_thread, and extraction is a separate Gemini text call that
@@ -30,16 +31,19 @@ DATA_DIR = Path(environ.get("SAKURA_DATA_DIR", Path(__file__).parent))
 DB_PATH = Path(environ.get("SAKURA_DB_PATH", DATA_DIR / "sakura.db"))
 MEMORY_MODEL = environ.get("SAKURA_MEMORY_MODEL", "gemini-2.5-flash")
 
-MAX_FACTS = int(environ.get("SAKURA_MAX_FACTS", 15))
-MAX_PREFERENCES = int(environ.get("SAKURA_MAX_PREFERENCES", 10))
-MAX_PROJECTS = int(environ.get("SAKURA_MAX_PROJECTS", 8))
-MAX_SUMMARY_CHARS = int(environ.get("SAKURA_MAX_SUMMARY_CHARS", 600))
+MAX_FACTS = int(environ.get("SAKURA_MAX_FACTS", 30))
+MAX_PREFERENCES = int(environ.get("SAKURA_MAX_PREFERENCES", 20))
+MAX_PROJECTS = int(environ.get("SAKURA_MAX_PROJECTS", 16))
+MAX_SUMMARY_CHARS = int(environ.get("SAKURA_MAX_SUMMARY_CHARS", 1200))
 UPDATE_TURN_THRESHOLD = int(environ.get("SAKURA_UPDATE_TURN_THRESHOLD", 12))
+MAX_RECENT_TURNS = int(environ.get("SAKURA_MAX_RECENT_TURNS", 100))
 
 MAX_ITEM_CHARS = 200           # single fact/preference/project entry
 MIN_TURNS_FOR_UPDATE = 2       # don't bother extracting from less than this
-MAX_TURNS_PER_EXTRACTION = 80  # bound the extraction prompt
-MEMORY_SECTION_MAX_CHARS = 4000  # ~1k tokens injected into the system prompt
+MAX_TURNS_PER_EXTRACTION = 100  # bound the extraction prompt (matches recent-turn window)
+MEMORY_SECTION_MAX_CHARS = 8000  # ~2k tokens injected into the system prompt
+# Separate budget for reconnect transcript; prefer newest turns if over cap.
+RECENT_TURNS_SECTION_MAX_CHARS = int(environ.get("SAKURA_RECENT_TURNS_SECTION_MAX_CHARS", 32000))
 
 EMPTY_MEMORY = {
     "profile": {"preferred_name": None, "facts": [], "preferences": [], "projects": []},
@@ -206,6 +210,18 @@ async def end_session(session_id, db_path=DB_PATH):
     await asyncio.to_thread(work)
 
 
+def _prune_turns(con, uid):
+    """Keep only the newest MAX_RECENT_TURNS rows for this user."""
+    con.execute(
+        """
+        DELETE FROM turns WHERE user_id=? AND id NOT IN (
+            SELECT id FROM turns WHERE user_id=? ORDER BY id DESC LIMIT ?
+        )
+        """,
+        (uid, uid, MAX_RECENT_TURNS),
+    )
+
+
 async def add_turn(session_id, uid, role, text, db_path=DB_PATH):
     def work():
         with _connect(db_path) as con:
@@ -213,8 +229,28 @@ async def add_turn(session_id, uid, role, text, db_path=DB_PATH):
                 "INSERT INTO turns (session_id, user_id, role, text, created_at) VALUES (?,?,?,?,?)",
                 (session_id, uid, role, text, _now()),
             )
+            _prune_turns(con, uid)
 
     await asyncio.to_thread(work)
+
+
+async def get_recent_turns(uid, limit=None, db_path=DB_PATH) -> list[dict]:
+    """Return the newest transcript turns oldest-first (empty list for unknown users)."""
+    n = MAX_RECENT_TURNS if limit is None else max(0, int(limit))
+
+    def work():
+        with _connect(db_path) as con:
+            # Opportunistic cleanup for DBs that predate the retention window
+            _prune_turns(con, uid)
+            rows = con.execute(
+                "SELECT id, role, text, created_at FROM turns WHERE user_id=? "
+                "ORDER BY id DESC LIMIT ?",
+                (uid, n),
+            ).fetchall()
+        # Newest-first from SQL → chronological for UI / prompt injection
+        return [dict(r) for r in reversed(rows)]
+
+    return await asyncio.to_thread(work)
 
 
 # ---------------------------------------------------------------- bounding
@@ -277,7 +313,42 @@ def format_memory_section(user_row) -> str:
     return "\n".join(lines)[:MEMORY_SECTION_MAX_CHARS]
 
 
-# ---------------------------------------------------------------- extraction
+def format_recent_turns_section(turns) -> str:
+    """Format prior transcript turns for Live system_instruction on reconnect.
+
+    Returns "" when there is nothing to replay. Truncates from the oldest end
+    if the block would exceed RECENT_TURNS_SECTION_MAX_CHARS.
+    """
+    if not turns:
+        return ""
+    header = [
+        "=== RECENT CONVERSATION (before this session) ===",
+        "Transcript of your most recent chats with this friend. Continue naturally —",
+        "do NOT re-introduce yourself, and do NOT read this transcript aloud.",
+    ]
+    footer = ["=== END RECENT CONVERSATION ==="]
+    overhead = len("\n".join(header + footer)) + 1
+    budget = max(0, RECENT_TURNS_SECTION_MAX_CHARS - overhead)
+
+    # Prefer newest turns when the budget is tight
+    lines = []
+    used = 0
+    for t in reversed(turns):
+        role = t.get("role") or "user"
+        text = str(t.get("text") or "").strip()
+        if not text:
+            continue
+        line = f"{role}: {text}"
+        # +1 for the newline that will join lines
+        cost = len(line) + (1 if lines else 0)
+        if used + cost > budget:
+            break
+        lines.append(line)
+        used += cost
+    if not lines:
+        return ""
+    lines.reverse()
+    return "\n".join(header + lines + footer)
 _EXTRACT_PROMPT = """You maintain the long-term memory document that a voice companion called Sakura
 keeps about one specific user. Merge the new conversation turns into the memory.
 

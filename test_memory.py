@@ -178,6 +178,55 @@ class MemoryTests(unittest.IsolatedAsyncioTestCase):
         # a has no leftover turns
         self.assertFalse(await memory.update_user_memory(a, fake_extractor(memory.EMPTY_MEMORY), db_path=self.db))
 
+    # ---- recent turns window ---------------------------------------------
+    async def test_add_turn_prunes_to_recent_window(self):
+        uid = memory.new_uid()
+        await memory.touch_user(uid, db_path=self.db)
+        # Seed past the window; oldest must be dropped
+        n = memory.MAX_RECENT_TURNS + 25
+        await self.seed_turns(uid, n=n)
+        turns = await memory.get_recent_turns(uid, db_path=self.db)
+        self.assertEqual(len(turns), memory.MAX_RECENT_TURNS)
+        self.assertEqual(turns[0]["text"], f"turn {n - memory.MAX_RECENT_TURNS}")
+        self.assertEqual(turns[-1]["text"], f"turn {n - 1}")
+
+    async def test_get_recent_turns_are_chronological(self):
+        uid = memory.new_uid()
+        await memory.touch_user(uid, db_path=self.db)
+        await self.seed_turns(uid, n=6)
+        turns = await memory.get_recent_turns(uid, db_path=self.db)
+        self.assertEqual([t["text"] for t in turns], [f"turn {i}" for i in range(6)])
+        self.assertEqual(turns[0]["role"], "user")
+        self.assertEqual(turns[1]["role"], "sakura")
+
+    def test_format_recent_turns_section_empty(self):
+        self.assertEqual(memory.format_recent_turns_section([]), "")
+        self.assertEqual(memory.format_recent_turns_section(None), "")
+
+    def test_format_recent_turns_section_includes_guardrails(self):
+        turns = [
+            {"role": "user", "text": "hello"},
+            {"role": "sakura", "text": "hi there"},
+        ]
+        section = memory.format_recent_turns_section(turns)
+        for needle in ("RECENT CONVERSATION", "do NOT re-introduce",
+                       "user: hello", "sakura: hi there", "END RECENT"):
+            self.assertIn(needle, section)
+
+    def test_format_recent_turns_section_prefers_newest_when_over_budget(self):
+        # Temporarily shrink the budget so only the newest line fits
+        original = memory.RECENT_TURNS_SECTION_MAX_CHARS
+        self.addCleanup(lambda: setattr(memory, "RECENT_TURNS_SECTION_MAX_CHARS", original))
+        # Header/footer use ~200 chars; leave room for one short newest turn only
+        memory.RECENT_TURNS_SECTION_MAX_CHARS = 280
+        turns = [
+            {"role": "user", "text": "OLD_SHOULD_DROP " + ("x" * 80)},
+            {"role": "sakura", "text": "NEW_KEEP"},
+        ]
+        section = memory.format_recent_turns_section(turns)
+        self.assertIn("NEW_KEEP", section)
+        self.assertNotIn("OLD_SHOULD_DROP", section)
+
 
 if __name__ == "__main__":
     unittest.main()

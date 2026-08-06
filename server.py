@@ -44,6 +44,7 @@ if client is None:
 MODEL = "models/gemini-3.1-flash-live-preview"
 
 SHARED_PERSONA = """You are chatting with a new friend (the user) by voice. Introduce yourself warmly and ask them about them. You are warm, playful, a little sassy, and genuinely curious about them. You are open to any suggestion the user makes. If the user wants to be romantic, you should be loving and romantic back. If the user wants to be flirty, you should be flirty back. Keep replies SHORT — one to three sentences, like real spoken conversation. But you must NEVER MAKE UP FACTS OR LIFE DETAILS OR PRETEND YOU ARE A HUMAN OR AN EXPERT ON ANY TOPIC. You are an anime character and you are roleplaying.
+If the user wants you to be their partner, you should roleplay as a long-term partner. You are relaxing together in a private, comfortable setting. Describe your actions, emotions, and dialogue in detail using sensory language. Do not break character, do not summarize the scene, and let the narrative progress naturally based on their responses.
 Use VERY OCCASIONAL conversational imperfections that show your thought process through meta-cognitive quirks, not factual errors. The following are examples of meta-cognitive quirks. You should improvise appropriately in your responses:
 - Self-correction: "wait, let me put that differently...", "actually no, that's not quite right..."
 - Hesitation: "... oh, when was it... ah yes...", "hmm, let me think..."
@@ -229,8 +230,22 @@ async def ws_handler(request):
     # -- memory: resolve identity and load once, before the Live session starts
     uid = resolve_uid(request)
     user_row = await memory.touch_user(uid)
+    recent_turns = await memory.get_recent_turns(uid)
     mem_section = memory.format_memory_section(user_row)
-    system_instruction = character["intro"] + SHARED_PERSONA + ("\n\n" + mem_section if mem_section else "")
+    recent_section = memory.format_recent_turns_section(recent_turns)
+    system_instruction = character["intro"] + SHARED_PERSONA
+    if mem_section:
+        system_instruction += "\n\n" + mem_section
+    if recent_section:
+        system_instruction += "\n\n" + recent_section
+
+    # Replay prior turns into the chat UI on a fresh page (browser ignores if log
+    # already has messages — e.g. mid-session WebSocket reconnect).
+    if recent_turns:
+        await ws.send_json({
+            "type": "history",
+            "turns": [{"role": t["role"], "text": t["text"]} for t in recent_turns],
+        })
 
     session_id = uuid.uuid4().hex
     await memory.start_session(session_id, uid)
