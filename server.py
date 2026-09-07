@@ -194,6 +194,12 @@ _GA_DISABLED_TAG = """<script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   window.__GA_ENABLED = false;
+  gtag('consent', 'default', {
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: 'denied'
+  });
 </script>
 """
 
@@ -205,6 +211,18 @@ _GA_ENABLED_TAG = """<!-- Google tag (gtag.js) -->
   window.dataLayer = window.dataLayer || [];
   function gtag(){{dataLayer.push(arguments);}}
   window.__GA_ENABLED = true;
+  gtag('consent', 'default', {{
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: 'denied',
+    wait_for_update: 500
+  }});
+  try {{
+    if (localStorage.getItem('sakura_consent') === 'granted') {{
+      gtag('consent', 'update', {{ analytics_storage: 'granted' }});
+    }}
+  }} catch (e) {{}}
   gtag('js', new Date());
   gtag('config', '{id}', {{
     cookie_flags: 'SameSite=Lax;Secure',

@@ -478,6 +478,71 @@ function spawnPetals() {
   }
 }
 
+/* ---------- cookie consent (Consent Mode; analytics off until Accept) ---------- */
+const CONSENT_KEY = "sakura_consent";
+const cookieBanner = $("#cookie-banner");
+const cookieSettings = $("#cookie-settings");
+
+function readConsent() {
+  try {
+    return localStorage.getItem(CONSENT_KEY);
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeConsent(value) {
+  try {
+    localStorage.setItem(CONSENT_KEY, value);
+  } catch (e) {
+    /* Private mode can block storage; the choice still applies for this page. */
+  }
+}
+
+function applyConsent(value) {
+  if (typeof gtag !== "function") return;
+  gtag("consent", "update", {
+    analytics_storage: value === "granted" ? "granted" : "denied",
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+  });
+}
+
+function setConsentUi(open) {
+  if (!cookieBanner || !cookieSettings) return;
+  cookieBanner.hidden = !open;
+  cookieSettings.hidden = open;
+  cookieSettings.setAttribute("aria-expanded", open ? "true" : "false");
+  document.body.classList.toggle("consent-open", open);
+}
+
+function chooseConsent(value) {
+  writeConsent(value);
+  applyConsent(value);
+  setConsentUi(false);
+}
+
+function initConsentBanner() {
+  if (!cookieBanner || !cookieSettings) return;
+  const existing = readConsent();
+  setConsentUi(!existing);
+  cookieBanner.querySelectorAll("[data-consent]").forEach((btn) => {
+    btn.addEventListener("click", () => chooseConsent(btn.getAttribute("data-consent")));
+  });
+  cookieSettings.addEventListener("click", () => {
+    setConsentUi(true);
+    const first = cookieBanner.querySelector("button");
+    if (first) first.focus();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || cookieBanner.hidden || !memModal.hidden) return;
+    chooseConsent("denied");
+  });
+}
+
+initConsentBanner();
+
 /* ---------- analytics (production host only; never send chat or memory text) ---------- */
 function trackGa(name, params) {
   if (!window.__GA_ENABLED || typeof gtag !== "function") return;

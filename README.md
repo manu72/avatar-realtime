@@ -170,9 +170,11 @@ own cookie. Changes apply from the next session.
 a local SQLite file on the server — not encrypted, not synced anywhere. No
 audio, cookies, or API keys are stored in memory documents. On
 `sakurachat.fun` the page also loads Google Analytics 4 (`G-88QWE8YM3Q`)
-for visitor counts. GA receives page views and a character-select event
-only — not transcripts, memory JSON, or the `sakura_uid` cookie. Google
-ads signals are off. Localhost does not load the Google tag.
+for visitor counts, behind a non-blocking cookie banner and Consent Mode
+(analytics off until Accept). GA receives page views and a character-select
+event only — not transcripts, memory JSON, or the `sakura_uid` cookie.
+Google ads signals stay off. Localhost does not load the Google tag. A
+Cookies button in the header lets you change the choice later.
 
 **Limitations**: identity is per-browser (clear cookies → they forget you);
 memory is shared across characters (Namu knows what you told Sakura);

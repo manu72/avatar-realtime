@@ -38,6 +38,14 @@ class GaHelperTests(_EnvRestore):
         self.assertIn("window.__GA_ENABLED = true", html)
         self.assertIn("cookie_flags: 'SameSite=Lax;Secure'", html)
         self.assertIn("allow_google_signals: false", html)
+        self.assertIn("analytics_storage: 'denied'", html)
+        self.assertLess(html.index("consent"), html.index("gtag('config'"))
+        self.assertIn("sakura_consent", html)
+
+    def test_localhost_stub_still_defines_consent_default(self):
+        html = server.ga_tag_html("127.0.0.1")
+        self.assertIn("gtag('consent', 'default'", html)
+        self.assertIn("analytics_storage: 'denied'", html)
 
     def test_www_alias_is_also_production(self):
         self.assertIn("G-88QWE8YM3Q", server.ga_tag_html("www.sakurachat.fun"))
@@ -80,7 +88,11 @@ class GaHelperTests(_EnvRestore):
         self.assertEqual(server.request_hostname(proxied), "sakurachat.fun")
 
     def test_index_html_has_placeholder(self):
-        self.assertIn("__GA_TAG__", HTML.read_text(encoding="utf-8"))
+        source = HTML.read_text(encoding="utf-8")
+        self.assertIn("__GA_TAG__", source)
+        self.assertIn('id="cookie-banner"', source)
+        self.assertIn('data-consent="denied"', source)
+        self.assertIn('data-consent="granted"', source)
 
 
 class GaIndexTests(_EnvRestore, unittest.IsolatedAsyncioTestCase):
