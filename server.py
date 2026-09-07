@@ -203,41 +203,57 @@ _GA_DISABLED_TAG = """<script>
 </script>
 """
 
-_GA_ENABLED_TAG = """<!-- Google tag (gtag.js) -->
-<link rel="preconnect" href="https://www.googletagmanager.com">
-<link rel="preconnect" href="https://www.google-analytics.com">
-<script async src="https://www.googletagmanager.com/gtag/js?id={id}"></script>
-<script>
+_GA_ENABLED_TAG = """<script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){{dataLayer.push(arguments);}}
   window.__GA_ENABLED = true;
+  window.__GA_MEASUREMENT_ID = '{id}';
   gtag('consent', 'default', {{
     ad_storage: 'denied',
     ad_user_data: 'denied',
     ad_personalization: 'denied',
-    analytics_storage: 'denied',
-    wait_for_update: 500
+    analytics_storage: 'denied'
   }});
+  /* Basic Consent Mode: do not contact Google until analytics consent is granted. */
+  window.loadSakuraGa = function () {{
+    if (window.__GA_LOADED || !window.__GA_MEASUREMENT_ID) return;
+    window.__GA_LOADED = true;
+    gtag('consent', 'update', {{ analytics_storage: 'granted' }});
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + window.__GA_MEASUREMENT_ID;
+    document.head.appendChild(s);
+    gtag('js', new Date());
+    gtag('config', window.__GA_MEASUREMENT_ID, {{
+      cookie_flags: 'SameSite=Lax;Secure',
+      cookie_domain: 'auto',
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false
+    }});
+  }};
   try {{
-    if (localStorage.getItem('sakura_consent') === 'granted') {{
-      gtag('consent', 'update', {{ analytics_storage: 'granted' }});
-    }}
+    if (localStorage.getItem('sakura_consent') === 'granted') window.loadSakuraGa();
   }} catch (e) {{}}
-  gtag('js', new Date());
-  gtag('config', '{id}', {{
-    cookie_flags: 'SameSite=Lax;Secure',
-    cookie_domain: 'auto',
-    allow_google_signals: false,
-    allow_ad_personalization_signals: false
-  }});
 </script>
 """
 
 
-def request_hostname(request):
-    """Hostname visitors actually used (proxy-aware), without a port suffix."""
-    host = request.headers.get("X-Forwarded-Host", request.host).split(",", 1)[0].strip()
-    return host.split(":")[0].lower()
+def connection_hostname(request):
+    """Hostname from the connection Host header only — never X-Forwarded-Host."""
+    return request.host.split(":")[0].lower()
+
+
+def configured_site_hostname():
+    """Canonical public hostname from SITE_URL, or '' if unset."""
+    configured = os.environ.get("SITE_URL", "").strip()
+    if not configured:
+        return ""
+    return (urlsplit(configured).hostname or "").lower()
+
+
+def ga_eligibility_host(request):
+    """Server-side host used to decide GA. Prefer SITE_URL; do not trust forwarded hosts."""
+    return configured_site_hostname() or connection_hostname(request)
 
 
 def ga_measurement_id():
@@ -264,11 +280,24 @@ def ga_enabled_for(hostname):
 
 
 def ga_tag_html(hostname):
-    """Official gtag snippet on allowed hosts; a no-op stub everywhere else."""
+    """Basic-mode GA loader on an allowed hostname; a no-op stub everywhere else."""
     mid = ga_measurement_id()
     if not mid or not ga_enabled_for(hostname):
         return _GA_DISABLED_TAG
     return _GA_ENABLED_TAG.format(id=mid)
+
+
+def ga_tag_for_request(request):
+    """Inject the loader only when both SITE_URL (if set) and Host are allowed.
+
+    X-Forwarded-Host is ignored so a client cannot enable the tag on localhost
+    or a preview URL by spoofing the public hostname.
+    """
+    visitor = connection_hostname(request)
+    canonical = ga_eligibility_host(request)
+    if not ga_enabled_for(canonical) or not ga_enabled_for(visitor):
+        return _GA_DISABLED_TAG
+    return ga_tag_html(canonical)
 
 
 def origin_allowed(request):
@@ -452,7 +481,7 @@ async def index(request):
     # Social crawlers require absolute og:image/og:url; substitute per request.
     html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     html = html.replace("__SITE_ORIGIN__", site_origin(request))
-    html = html.replace("__GA_TAG__", ga_tag_html(request_hostname(request)))
+    html = html.replace("__GA_TAG__", ga_tag_for_request(request))
     resp = web.Response(text=html, content_type="text/html", charset="utf-8")
     secure = request.headers.get("X-Forwarded-Proto", request.scheme) == "https"
     resp.set_cookie(UID_COOKIE, uid, max_age=UID_COOKIE_MAX_AGE,

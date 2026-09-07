@@ -500,9 +500,13 @@ function writeConsent(value) {
 }
 
 function applyConsent(value) {
+  if (value === "granted") {
+    if (typeof window.loadSakuraGa === "function") window.loadSakuraGa();
+    return;
+  }
   if (typeof gtag !== "function") return;
   gtag("consent", "update", {
-    analytics_storage: value === "granted" ? "granted" : "denied",
+    analytics_storage: "denied",
     ad_storage: "denied",
     ad_user_data: "denied",
     ad_personalization: "denied",
@@ -546,10 +550,12 @@ initConsentBanner();
 /* ---------- analytics (production host only; never send chat or memory text) ---------- */
 function trackGa(name, params) {
   if (!window.__GA_ENABLED || typeof gtag !== "function") return;
+  if (readConsent() !== "granted") return;
   gtag("event", name, params);
 }
 
 function trackCharacterChosen(id) {
+  if (readConsent() !== "granted") return;
   const character = CHARACTERS[id] ? id : "sakura";
   trackGa("select_content", { content_type: "character", item_id: character });
   /* Extra page_view so GA can tell "opened the picker" from "started a chat". */
