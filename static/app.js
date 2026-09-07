@@ -478,10 +478,27 @@ function spawnPetals() {
   }
 }
 
+/* ---------- analytics (production host only; never send chat or memory text) ---------- */
+function trackGa(name, params) {
+  if (!window.__GA_ENABLED || typeof gtag !== "function") return;
+  gtag("event", name, params);
+}
+
+function trackCharacterChosen(id) {
+  const character = CHARACTERS[id] ? id : "sakura";
+  trackGa("select_content", { content_type: "character", item_id: character });
+  /* Extra page_view so GA can tell "opened the picker" from "started a chat". */
+  trackGa("page_view", {
+    page_title: `${CHARACTERS[character].name} Chat`,
+    page_location: `${location.origin}/chat/${character}`,
+  });
+}
+
 /* ---------- boot: browsers require a gesture before audio ---------- */
 /* called by the splash cards' inline onclick in index.html; Sakura is the default */
 window.bootApp = (id) => {
   setCharacter(id || "sakura");
+  trackCharacterChosen(charId);
   spawnPetals();
   ensurePlayCtx();
   playCtx.resume();

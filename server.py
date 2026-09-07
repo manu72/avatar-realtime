@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -183,6 +184,75 @@ def site_origin(request):
     return f"{proto}://{host}"
 
 
+# Public GA4 web stream ID — safe to ship in HTML. Override or blank via env.
+DEFAULT_GA_MEASUREMENT_ID = "G-88QWE8YM3Q"
+DEFAULT_GA_HOSTS = frozenset({"sakurachat.fun", "www.sakurachat.fun"})
+# Reject anything that is not a real GA4 ID so a bad env var cannot break or XSS the page.
+GA_MEASUREMENT_ID_RE = re.compile(r"^G-[A-Z0-9]+$")
+
+_GA_DISABLED_TAG = """<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  window.__GA_ENABLED = false;
+</script>
+"""
+
+_GA_ENABLED_TAG = """<!-- Google tag (gtag.js) -->
+<link rel="preconnect" href="https://www.googletagmanager.com">
+<link rel="preconnect" href="https://www.google-analytics.com">
+<script async src="https://www.googletagmanager.com/gtag/js?id={id}"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){{dataLayer.push(arguments);}}
+  window.__GA_ENABLED = true;
+  gtag('js', new Date());
+  gtag('config', '{id}', {{
+    cookie_flags: 'SameSite=Lax;Secure',
+    cookie_domain: 'auto',
+    allow_google_signals: false,
+    allow_ad_personalization_signals: false
+  }});
+</script>
+"""
+
+
+def request_hostname(request):
+    """Hostname visitors actually used (proxy-aware), without a port suffix."""
+    host = request.headers.get("X-Forwarded-Host", request.host).split(",", 1)[0].strip()
+    return host.split(":")[0].lower()
+
+
+def ga_measurement_id():
+    """Return a validated Measurement ID, or '' to keep the tag off."""
+    if "GA_MEASUREMENT_ID" in os.environ:
+        raw = os.environ.get("GA_MEASUREMENT_ID", "").strip()
+    else:
+        raw = DEFAULT_GA_MEASUREMENT_ID
+    if not raw:
+        return ""
+    mid = raw.upper()
+    if not GA_MEASUREMENT_ID_RE.fullmatch(mid):
+        log.warning("ignoring invalid GA_MEASUREMENT_ID")
+        return ""
+    return mid
+
+
+def ga_enabled_for(hostname):
+    """Only the public site is counted, so localhost/Railway preview stay out of reports."""
+    if os.environ.get("GA_DISABLE", "").strip().lower() in {"1", "true", "yes"}:
+        return False
+    extra = {h.strip().lower() for h in os.environ.get("GA_HOSTS", "").split(",") if h.strip()}
+    return hostname in DEFAULT_GA_HOSTS | extra
+
+
+def ga_tag_html(hostname):
+    """Official gtag snippet on allowed hosts; a no-op stub everywhere else."""
+    mid = ga_measurement_id()
+    if not mid or not ga_enabled_for(hostname):
+        return _GA_DISABLED_TAG
+    return _GA_ENABLED_TAG.format(id=mid)
+
+
 def origin_allowed(request):
     """Same-origin is always fine; extra origins via ALLOWED_ORIGINS (comma-separated).
 
@@ -212,7 +282,9 @@ async def guard(request, handler):
     if not resp.prepared:  # websocket responses are already on the wire
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("X-Frame-Options", "DENY")
-        resp.headers.setdefault("Referrer-Policy", "no-referrer")
+        # Origin-only on cross-site requests: GA4 can still read document.referrer
+        # for acquisition, without leaking full paths to third parties.
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     return resp
 
 
@@ -362,6 +434,7 @@ async def index(request):
     # Social crawlers require absolute og:image/og:url; substitute per request.
     html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     html = html.replace("__SITE_ORIGIN__", site_origin(request))
+    html = html.replace("__GA_TAG__", ga_tag_html(request_hostname(request)))
     resp = web.Response(text=html, content_type="text/html", charset="utf-8")
     secure = request.headers.get("X-Forwarded-Proto", request.scheme) == "https"
     resp.set_cookie(UID_COOKIE, uid, max_age=UID_COOKIE_MAX_AGE,

@@ -47,6 +47,9 @@ If you logged in with GitHub, most of this is already done.
    | `LOG_LEVEL` | `INFO` (default) or `DEBUG` | no |
    | `ALLOWED_ORIGINS` | extra allowed browser origins, comma-separated (same-origin is always allowed, so usually leave unset) | no |
    | `SITE_URL` | public origin used in Open Graph / Twitter / canonical tags (e.g. `https://your-app.up.railway.app`); if unset, derived from the request Host | recommended for link previews |
+   | `GA_MEASUREMENT_ID` | defaults to `G-88QWE8YM3Q`; set empty to disable GA4 | no — the tag only loads on `sakurachat.fun` |
+   | `GA_HOSTS` | extra hostnames that should load the Google tag (comma-separated) | no |
+   | `GA_DISABLE` | `1` to force GA4 off | no |
 
    Railway sets `PORT` automatically — do not set it yourself. `HOST` defaults
    to `0.0.0.0`, which is what Railway needs.
