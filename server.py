@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -183,6 +184,122 @@ def site_origin(request):
     return f"{proto}://{host}"
 
 
+# Public GA4 web stream ID — safe to ship in HTML. Override or blank via env.
+DEFAULT_GA_MEASUREMENT_ID = "G-88QWE8YM3Q"
+DEFAULT_GA_HOSTS = frozenset({"sakurachat.fun", "www.sakurachat.fun"})
+# Reject anything that is not a real GA4 ID so a bad env var cannot break or XSS the page.
+GA_MEASUREMENT_ID_RE = re.compile(r"^G-[A-Z0-9]+$")
+
+_GA_DISABLED_TAG = """<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  window.__GA_ENABLED = false;
+  gtag('consent', 'default', {
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: 'denied'
+  });
+</script>
+"""
+
+_GA_ENABLED_TAG = """<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){{dataLayer.push(arguments);}}
+  window.__GA_ENABLED = true;
+  window.__GA_MEASUREMENT_ID = '{id}';
+  gtag('consent', 'default', {{
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: 'denied'
+  }});
+  /* Basic Consent Mode: do not contact Google until analytics consent is granted. */
+  window.loadSakuraGa = function () {{
+    if (window.__GA_LOADED || !window.__GA_MEASUREMENT_ID) return;
+    window.__GA_LOADED = true;
+    gtag('consent', 'update', {{ analytics_storage: 'granted' }});
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + window.__GA_MEASUREMENT_ID;
+    document.head.appendChild(s);
+    gtag('js', new Date());
+    gtag('config', window.__GA_MEASUREMENT_ID, {{
+      cookie_flags: 'SameSite=Lax;Secure',
+      cookie_domain: 'auto',
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false
+    }});
+  }};
+  try {{
+    if (localStorage.getItem('sakura_consent') === 'granted') window.loadSakuraGa();
+  }} catch (e) {{}}
+</script>
+"""
+
+
+def connection_hostname(request):
+    """Hostname from the connection Host header only — never X-Forwarded-Host."""
+    return request.host.split(":")[0].lower()
+
+
+def configured_site_hostname():
+    """Canonical public hostname from SITE_URL, or '' if unset."""
+    configured = os.environ.get("SITE_URL", "").strip()
+    if not configured:
+        return ""
+    return (urlsplit(configured).hostname or "").lower()
+
+
+def ga_eligibility_host(request):
+    """Server-side host used to decide GA. Prefer SITE_URL; do not trust forwarded hosts."""
+    return configured_site_hostname() or connection_hostname(request)
+
+
+def ga_measurement_id():
+    """Return a validated Measurement ID, or '' to keep the tag off."""
+    if "GA_MEASUREMENT_ID" in os.environ:
+        raw = os.environ.get("GA_MEASUREMENT_ID", "").strip()
+    else:
+        raw = DEFAULT_GA_MEASUREMENT_ID
+    if not raw:
+        return ""
+    mid = raw.upper()
+    if not GA_MEASUREMENT_ID_RE.fullmatch(mid):
+        log.warning("ignoring invalid GA_MEASUREMENT_ID")
+        return ""
+    return mid
+
+
+def ga_enabled_for(hostname):
+    """Only the public site is counted, so localhost/Railway preview stay out of reports."""
+    if os.environ.get("GA_DISABLE", "").strip().lower() in {"1", "true", "yes"}:
+        return False
+    extra = {h.strip().lower() for h in os.environ.get("GA_HOSTS", "").split(",") if h.strip()}
+    return hostname in DEFAULT_GA_HOSTS | extra
+
+
+def ga_tag_html(hostname):
+    """Basic-mode GA loader on an allowed hostname; a no-op stub everywhere else."""
+    mid = ga_measurement_id()
+    if not mid or not ga_enabled_for(hostname):
+        return _GA_DISABLED_TAG
+    return _GA_ENABLED_TAG.format(id=mid)
+
+
+def ga_tag_for_request(request):
+    """Inject the loader only when both SITE_URL (if set) and Host are allowed.
+
+    X-Forwarded-Host is ignored so a client cannot enable the tag on localhost
+    or a preview URL by spoofing the public hostname.
+    """
+    visitor = connection_hostname(request)
+    canonical = ga_eligibility_host(request)
+    if not ga_enabled_for(canonical) or not ga_enabled_for(visitor):
+        return _GA_DISABLED_TAG
+    return ga_tag_html(canonical)
+
+
 def origin_allowed(request):
     """Same-origin is always fine; extra origins via ALLOWED_ORIGINS (comma-separated).
 
@@ -212,7 +329,9 @@ async def guard(request, handler):
     if not resp.prepared:  # websocket responses are already on the wire
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("X-Frame-Options", "DENY")
-        resp.headers.setdefault("Referrer-Policy", "no-referrer")
+        # Origin-only on cross-site requests: GA4 can still read document.referrer
+        # for acquisition, without leaking full paths to third parties.
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     return resp
 
 
@@ -362,6 +481,7 @@ async def index(request):
     # Social crawlers require absolute og:image/og:url; substitute per request.
     html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     html = html.replace("__SITE_ORIGIN__", site_origin(request))
+    html = html.replace("__GA_TAG__", ga_tag_for_request(request))
     resp = web.Response(text=html, content_type="text/html", charset="utf-8")
     secure = request.headers.get("X-Forwarded-Proto", request.scheme) == "https"
     resp.set_cookie(UID_COOKIE, uid, max_age=UID_COOKIE_MAX_AGE,

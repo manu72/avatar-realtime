@@ -478,10 +478,98 @@ function spawnPetals() {
   }
 }
 
+/* ---------- cookie consent (Consent Mode; analytics off until Accept) ---------- */
+const CONSENT_KEY = "sakura_consent";
+const cookieBanner = $("#cookie-banner");
+const cookieSettings = $("#cookie-settings");
+
+function readConsent() {
+  try {
+    return localStorage.getItem(CONSENT_KEY);
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeConsent(value) {
+  try {
+    localStorage.setItem(CONSENT_KEY, value);
+  } catch (e) {
+    /* Private mode can block storage; the choice still applies for this page. */
+  }
+}
+
+function applyConsent(value) {
+  if (value === "granted") {
+    if (typeof window.loadSakuraGa === "function") window.loadSakuraGa();
+    return;
+  }
+  if (typeof gtag !== "function") return;
+  gtag("consent", "update", {
+    analytics_storage: "denied",
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+  });
+}
+
+function setConsentUi(open) {
+  if (!cookieBanner || !cookieSettings) return;
+  cookieBanner.hidden = !open;
+  cookieSettings.hidden = open;
+  cookieSettings.setAttribute("aria-expanded", open ? "true" : "false");
+  document.body.classList.toggle("consent-open", open);
+}
+
+function chooseConsent(value) {
+  writeConsent(value);
+  applyConsent(value);
+  setConsentUi(false);
+}
+
+function initConsentBanner() {
+  if (!cookieBanner || !cookieSettings) return;
+  const existing = readConsent();
+  setConsentUi(!existing);
+  cookieBanner.querySelectorAll("[data-consent]").forEach((btn) => {
+    btn.addEventListener("click", () => chooseConsent(btn.getAttribute("data-consent")));
+  });
+  cookieSettings.addEventListener("click", () => {
+    setConsentUi(true);
+    const first = cookieBanner.querySelector("button");
+    if (first) first.focus();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || cookieBanner.hidden || !memModal.hidden) return;
+    chooseConsent("denied");
+  });
+}
+
+initConsentBanner();
+
+/* ---------- analytics (production host only; never send chat or memory text) ---------- */
+function trackGa(name, params) {
+  if (!window.__GA_ENABLED || typeof gtag !== "function") return;
+  if (readConsent() !== "granted") return;
+  gtag("event", name, params);
+}
+
+function trackCharacterChosen(id) {
+  if (readConsent() !== "granted") return;
+  const character = CHARACTERS[id] ? id : "sakura";
+  trackGa("select_content", { content_type: "character", item_id: character });
+  /* Extra page_view so GA can tell "opened the picker" from "started a chat". */
+  trackGa("page_view", {
+    page_title: `${CHARACTERS[character].name} Chat`,
+    page_location: `${location.origin}/chat/${character}`,
+  });
+}
+
 /* ---------- boot: browsers require a gesture before audio ---------- */
 /* called by the splash cards' inline onclick in index.html; Sakura is the default */
 window.bootApp = (id) => {
   setCharacter(id || "sakura");
+  trackCharacterChosen(charId);
   spawnPetals();
   ensurePlayCtx();
   playCtx.resume();

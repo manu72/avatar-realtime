@@ -47,18 +47,21 @@ single-writer — run **one replica**.
 
 ### Environment variables
 
-| Variable                | Default                      | Purpose                                                                                   |
-| ----------------------- | ---------------------------- | ----------------------------------------------------------------------------------------- |
-| `GEMINI_API_KEY`        | — (required)                 | Gemini API key for Live voice + memory extraction                                         |
-| `PORT`                  | `8787`                       | Listen port (Railway sets this automatically)                                             |
-| `HOST`                  | `0.0.0.0`                    | Bind address                                                                              |
-| `LOG_LEVEL`             | `INFO`                       | Python logging level                                                                      |
-| `ALLOWED_ORIGINS`       | unset                        | Extra allowed browser origins, comma-separated; same-origin always allowed                |
-| `SITE_URL`              | request host                 | Canonical public origin for OG/Twitter/canonical URLs (e.g. `https://sakura.example.com`) |
-| `SAKURA_DATA_DIR`       | repo dir                     | Directory for `sakura.db` (created automatically; use `/data` on Railway)                 |
-| `SAKURA_DB_PATH`        | `$SAKURA_DATA_DIR/sakura.db` | Exact DB file path override                                                               |
-| `SAKURA_MEMORY_MODEL`   | `gemini-2.5-flash`           | Text model used for memory extraction                                                     |
-| `SAKURA_MAX_FACTS` etc. | see `memory.py`              | Memory size caps and update threshold                                                     |
+| Variable                | Default                      | Purpose                                                                            |
+| ----------------------- | ---------------------------- | ---------------------------------------------------------------------------------- |
+| `GEMINI_API_KEY`        | — (required)                 | Gemini API key for Live voice + memory extraction                                  |
+| `PORT`                  | `8787`                       | Listen port (Railway sets this automatically)                                      |
+| `HOST`                  | `0.0.0.0`                    | Bind address                                                                       |
+| `LOG_LEVEL`             | `INFO`                       | Python logging level                                                               |
+| `ALLOWED_ORIGINS`       | unset                        | Extra allowed browser origins, comma-separated; same-origin always allowed         |
+| `SITE_URL`              | request host                 | Canonical public origin for OG/Twitter/canonical URLs and GA host gating           |
+| `GA_MEASUREMENT_ID`     | `G-88QWE8YM3Q`               | GA4 web stream ID. Set empty to disable the tag even on the public host            |
+| `GA_HOSTS`              | unset                        | Extra hostnames that load the Google tag, comma-separated (e.g. a Railway preview) |
+| `GA_DISABLE`            | unset                        | Set `1` to force the tag off on every host                                         |
+| `SAKURA_DATA_DIR`       | repo dir                     | Directory for `sakura.db` (created automatically; use `/data` on Railway)          |
+| `SAKURA_DB_PATH`        | `$SAKURA_DATA_DIR/sakura.db` | Exact DB file path override                                                        |
+| `SAKURA_MEMORY_MODEL`   | `gemini-2.5-flash`           | Text model used for memory extraction                                              |
+| `SAKURA_MAX_FACTS` etc. | see `memory.py`              | Memory size caps and update threshold                                              |
 
 ## How it works
 
@@ -73,7 +76,14 @@ single-writer — run **one replica**.
 - **`static/app.js`** — mic capture via an inline AudioWorklet, gapless
   scheduled playback via Web Audio, and lip sync: an AnalyserNode measures the
   RMS loudness of whatever is currently playing and picks one of three mouth
-  sprites (closed / half / open) every 40 ms.
+  sprites (closed / half / open) every 40 ms. On the public host, after
+  analytics consent, it also sends a GA4 `select_content` event (and a
+  `/chat/{character}` page view) when a companion is chosen — never chat
+  text or memory.
+- **Google Analytics 4** — `server.py` injects a Basic Consent Mode loader
+  on `sakurachat.fun` / `www.sakurachat.fun` only. gtag.js is not requested
+  until the visitor accepts. Local/dev pages get a no-op `gtag` stub.
+  Chat transcripts and memory documents are never sent to Google.
 - **`assets/`** — character sprites generated with GPT Image 2: one base image
   per character, then image-to-image edits that change _only_ the mouth (and
   outfit swaps), backgrounds removed so they composite over any scene. Six
@@ -86,6 +96,7 @@ server.py              aiohttp server: static files, /ws relay, /health, /memory
 memory.py              SQLite persistence + Gemini text extraction (stdlib sqlite3)
 test_memory.py         unit tests for memory.py (extraction mocked, no API needed)
 test_tools.py          unit tests for the scene-tool allow-list validation
+test_ga.py             unit tests for GA4 host gating and HTML injection
 requirements.txt       google-genai + aiohttp (the only dependencies)
 railway.json           Railway deploy config (start command, health check)
 .python-version        Python 3.12 (used by Railway's builder)
@@ -158,7 +169,13 @@ own cookie. Changes apply from the next session.
 
 **Privacy**: memories and recent text transcripts are stored as plain text in
 a local SQLite file on the server — not encrypted, not synced anywhere. No
-audio, cookies, or API keys are stored in memory documents.
+audio, cookies, or API keys are stored in memory documents. On `sakurachat.fun` the page may load Google Analytics 4 (`G-88QWE8YM3Q`)
+for visitor counts, behind a non-blocking cookie banner and Basic Consent
+Mode: gtag.js is not loaded, and no measurement pings are sent, until
+Accept. After that, GA receives page views and a character-select event
+only — not transcripts, memory JSON, or the `sakura_uid` cookie. Google
+ads signals stay off. Localhost does not enable the tag. A Cookies button
+in the header lets you change the choice later.
 
 **Limitations**: identity is per-browser (clear cookies → they forget you);
 memory is shared across characters (Namu knows what you told Sakura);
@@ -166,8 +183,8 @@ extraction quality depends on the text model; graceful shutdown flushes pending
 memory writes (a hard kill can still lose the last extraction); chat-log
 restore only fills an empty UI (mid-session reconnects keep the live bubbles).
 
-Tests: `.venv/bin/python -m unittest test_memory -v` (extraction is mocked; no
-API access needed).
+Tests: `.venv/bin/python -m unittest test_memory test_ga -v` (extraction is
+mocked; no API access needed).
 
 ## Voice model
 
